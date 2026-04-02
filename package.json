@@ -1,5 +1,5 @@
 {
-  "name": "invoice-manager",
+  "name": "invoice-service",
   "version": "1.0.0",
   "description": "Invoice Management",
   "main": "index.js",
@@ -9,7 +9,7 @@
     "start": "node dist/index.js",
     "start:dev": "nodemon index.ts"
   },
-  "author": "Olason",
+  "author": "Olaniyan A . O",
   "license": "ISC",
   "dependencies": {
     "@types/cors": "^2.8.1",
@@ -23,13 +23,17 @@
     "mongoose": "^8.10.1",
     "morgan": "^1.10.1",
     "reflect-metadata": "^0.2.2",
-    "typescript": "^5.7.3"
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.1"
   },
   "devDependencies": {
     "@types/express": "^5.0.3",
     "@types/morgan": "^1.9.10",
     "@types/node": "^24.0.8",
+    "@types/swagger-jsdoc": "^6.0.4",
+    "@types/swagger-ui-express": "^4.1.8",
     "nodemon": "^3.1.9",
-    "ts-node": "^10.9.2"
+    "ts-node": "^10.9.2",
+    "typescript": "^6.0.2"
   }
 }

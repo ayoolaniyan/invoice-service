@@ -5,10 +5,14 @@ import cors, { CorsOptions } from "cors";
 import { responseFormatter } from "./src/middlewares/responseFormatter";
 import morgan from "morgan";
 import { addRoutes } from "./src/config/routes.config";
+import swaggerUi from 'swagger-ui-express';
+import { swaggerSpec } from './src/config/swagger.config';
+
+
 
 const app: Express = express();
 
-dotenv.config({ path: './config.env' });
+dotenv.config();
 
 app.use(cors());
 
@@ -17,6 +21,8 @@ app.use(morgan('dev'));
 app.use(express.json());
 
 app.use(responseFormatter);
+
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 app.get("/", (req: Request, res: Response) => {
     res.send("Express + TypeScript Server");

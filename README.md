@@ -1,5 +1,5 @@
 # Node + Express + Mongoose + MongoDB
-Invoice Manager - Simple app to manage invoices at different status
+Invoice Service - Simple app to manage invoices at different status
 
 ## Completed
 - Database connection & schema

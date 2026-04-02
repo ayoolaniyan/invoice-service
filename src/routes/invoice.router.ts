@@ -20,6 +20,32 @@ export class InvoiceRouter {
 
     private initializeRoutes() {
 
+        /**                                                                                                                                                                                    
+         * @swagger                                                                                                                                                                            
+         * /invoice/create:                                                                                                                                                                    
+         *   post:                                                                                                                                                                             
+         *     summary: Create a new invoice                                                                                                                                                   
+         *     tags: [Invoices]                                                                                                                                                                
+         *     requestBody:                                                                                                                                                                    
+         *       required: true                                                                                                                                                                
+         *       content:                                                                                                                                                                      
+         *         application/json:                                                                                                                                                           
+         *           schema:                                                                                                                                                                   
+         *             $ref: '#/components/schemas/Invoice'                                                                                                                                    
+         *     responses:                                                                                                                                                                      
+         *       201:                                                                                                                                                                          
+         *         description: Invoice created successfully                                                                                                                                   
+         *         content:                                                                                                                                                                    
+         *           application/json:                                                                                                                                                         
+         *             schema:                                                                                                                                                                 
+         *               $ref: '#/components/schemas/Invoice'                                                                                                                                  
+         *       400:                                                                                                                                                                          
+         *         description: Validation error                                                                                                                                               
+         *         content:                                                                                                                                                                    
+         *           application/json:                                                                                                                                                         
+         *             schema:                                                                                                                                                                 
+         *               $ref: '#/components/schemas/Error'                                                                                                                                    
+         */
         this.router.post(
             "/create",
             createInvoiceValidator,
@@ -51,6 +77,33 @@ export class InvoiceRouter {
                 }
             });
 
+        /**                                                                                                                                                                                    
+         * @swagger                                                                                                                                                                            
+         * /invoice:                                                                                                                                                                           
+         *   get:                                                                                                                                                                              
+         *     summary: Get all invoices                                                                                                                                                       
+         *     tags: [Invoices]                                                                                                                                                                
+         *     parameters:                                                                                                                                                                     
+         *       - in: query                                                                                                                                                                   
+         *         name: page                                                                                                                                                                  
+         *         schema:                                                                                                                                                                     
+         *           type: integer                                                                                                                                                             
+         *         description: Page number                                                                                                                                                    
+         *       - in: query                                                                                                                                                                   
+         *         name: limit                                                                                                                                                                 
+         *         schema:                                                                                                                                                                     
+         *           type: integer                                                                                                                                                             
+         *         description: Items per page                                                                                                                                                 
+         *     responses:                                                                                                                                                                      
+         *       200:                                                                                                                                                                          
+         *         description: List of invoices                                                                                                                                               
+         *         content:                                                                                                                                                                    
+         *           application/json:                                                                                                                                                         
+         *             schema:                                                                                                                                                                 
+         *               type: array                                                                                                                                                           
+         *               items:                                                                                                                                                                
+         *                 $ref: '#/components/schemas/Invoice'                                                                                                                                
+         */
         this.router.get("/", async (req: Request, res: Response) => {
             const result = validationResult(req);
             if (result.isEmpty()) {
@@ -62,6 +115,29 @@ export class InvoiceRouter {
 
         });
 
+        /**                                                                                                                                                                                    
+         * @swagger                                                                                                                                                                            
+         * /invoice/{id}:                                                                                                                                                                      
+         *   get:                                                                                                                                                                              
+         *     summary: Get invoice by ID                                                                                                                                                      
+         *     tags: [Invoices]                                                                                                                                                                
+         *     parameters:                                                                                                                                                                     
+         *       - in: path                                                                                                                                                                    
+         *         name: id                                                                                                                                                                    
+         *         required: true                                                                                                                                                              
+         *         schema:                                                                                                                                                                     
+         *           type: string                                                                                                                                                              
+         *         description: Invoice ID                                                                                                                                                     
+         *     responses:                                                                                                                                                                      
+         *       200:                                                                                                                                                                          
+         *         description: Invoice found                                                                                                                                                  
+         *         content:                                                                                                                                                                    
+         *           application/json:                                                                                                                                                         
+         *             schema:                                                                                                                                                                 
+         *               $ref: '#/components/schemas/Invoice'                                                                                                                                  
+         *       404:                                                                                                                                                                          
+         *         description: Invoice not found                                                                                                                                              
+         */
         this.router.get("/:id", async (req: Request<{ id: string }>, res: Response) => {
             const result = validationResult(req);
             if (result.isEmpty()) {
