@@ -5,9 +5,18 @@ interface IResponse {
     status: "success" | "error";
     statusCode: number;
     message: string;
-    data?: any;
-    error?: any;
-    meta?: any;
+    data?: unknown;
+    error?: unknown;
+    meta?: unknown;
+}
+
+interface IPaginatedBody {
+    data: unknown;
+    meta: unknown;
+}
+
+function isPaginated(body: unknown): body is IPaginatedBody {
+    return typeof body === "object" && body !== null && "meta" in body && Boolean((body as IPaginatedBody).meta);
 }
 
 export function responseFormatter(
@@ -18,7 +27,7 @@ export function responseFormatter(
 
     const result = res.json.bind(res);
 
-    res.json = (data: any): Response => {
+    res.json = (data: unknown): Response => {
         const statusCode = res.statusCode ? res.statusCode : StatusCodes.OK;
         const isError = statusCode >= StatusCodes.BAD_REQUEST;
 
@@ -30,7 +39,7 @@ export function responseFormatter(
 
         if (isError) {
             response.error = data;
-        } else if (data?.meta) {
+        } else if (isPaginated(data)) {
             response.data = data.data;
             response.meta = data.meta;
         } else {

@@ -1,3 +1,4 @@
+import path from 'path';
 import swaggerJsdoc from 'swagger-jsdoc';
 import { INVOICE_STATUSES } from '../models/invoice.interface';
 import { API_PREFIX } from './routes.config';
@@ -70,6 +71,9 @@ const companyInputProperties = {
         description: 'Company address',
     },
 };
+
+// The registration number can't be changed after a company is created
+const { registrationNumber: _registrationNumber, ...updatableCompanyProperties } = companyInputProperties;
 
 const timestampProperties = {
     createdAt: {
@@ -224,7 +228,7 @@ const options: swaggerJsdoc.Options = {
                 UpdateCompanyInput: {
                     type: 'object',
                     minProperties: 1,
-                    properties: (({ registrationNumber, ...rest }) => rest)(companyInputProperties),
+                    properties: updatableCompanyProperties,
                 },
                 PaginationMeta: {
                     type: 'object',
@@ -269,7 +273,8 @@ const options: swaggerJsdoc.Options = {
             },
         },
     },
-    apis: ['./src/routes/*.ts'], // Path to the API routes
+    // Relative to this file, so it works from any working directory and from the compiled build (dist/)
+    apis: [path.join(__dirname, '../routes/*.{ts,js}').replace(/\\/g, '/')], // glob needs forward slashes, also on Windows
 };
 
 type OperationResponses = Record<string, Record<string, unknown>>;

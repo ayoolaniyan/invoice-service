@@ -1,0 +1,9 @@
+{
+  // Production build: compiles the app and its scripts into dist/, leaving out tests
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "sourceMap": true
+  },
+  "include": ["index.ts", "src/**/*.ts", "scripts/**/*.ts"]
+}

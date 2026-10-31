@@ -1,4 +1,4 @@
-import { inject } from "inversify";
+import { inject, injectable } from "inversify";
 import express, { Request, Response, Router } from "express";
 import { CompanyController } from "./../controllers/company.controller";
 import { StatusCodes } from "http-status-codes";
@@ -8,6 +8,7 @@ import { idParamValidator, paginationValidator } from "../validators/common.vali
 import { validateRequest } from "../middlewares/validateRequest";
 import { authorize } from "../middlewares/auth";
 
+@injectable()
 export class CompanyRouter {
     public router: Router;
 

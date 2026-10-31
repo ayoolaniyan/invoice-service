@@ -1,0 +1,38 @@
+# Runs the API with a local MongoDB:
+#   API_KEYS=<entry from npm run api-key:generate> docker compose up --build
+# API_KEYS (and the optional APP_PORT, CORS_ORIGINS, LOG_LEVEL) can also be set in a .env file
+# next to this one. The database settings are fixed below, so the app always uses this MongoDB
+# container, never a database configured in .env for local runs.
+services:
+  mongo:
+    # 8.0 images refuse to start on Linux kernel 6.19+ (SERVER-121912), which recent Docker Desktop VMs use
+    image: mongo:8.2
+    restart: unless-stopped
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    ports:
+      - "${APP_PORT:-3001}:3001"
+    environment:
+      DATABASE_CONNECTION_STRING: mongodb://mongo:27017
+      DATABASE_NAME: invoice_service
+      PORT: "3001"
+      API_KEYS: ${API_KEYS:?Set API_KEYS, e.g. with npm run api-key:generate -- local write}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      # The image runs with NODE_ENV=production; keep the docs available for local use
+      ENABLE_API_DOCS: "true"
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+
+volumes:
+  mongo-data:

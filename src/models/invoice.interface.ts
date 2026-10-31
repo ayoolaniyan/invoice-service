@@ -32,7 +32,7 @@ export interface ICreateInvoice {
     companyId: string;
 }
 
-export interface IUpdateInvoice extends Partial<ICreateInvoice> {}
+export type IUpdateInvoice = Partial<ICreateInvoice>;
 
 export interface IPartialInvoiceWithId extends IUpdateInvoice {
     _id: string;

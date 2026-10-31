@@ -1,4 +1,4 @@
-import { inject } from "inversify";
+import { inject, injectable } from "inversify";
 import { ICompany } from "./../models/company.interface";
 import { IPaginatedResult, IPagination } from "./../models/pagination.interface";
 import { Request } from "express";
@@ -6,6 +6,7 @@ import { matchedData } from "express-validator";
 import { CompanyService } from "./../services/company.service";
 import { Document } from "mongoose";
 
+@injectable()
 export class CompanyController {
     constructor(
         @inject(CompanyService) private companyService: CompanyService,

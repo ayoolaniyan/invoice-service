@@ -15,8 +15,6 @@ import * as dotenv from "dotenv";
 import { Company } from "../src/models/company.schema";
 import { Invoice } from "../src/models/invoice.schema";
 
-dotenv.config();
-
 const BATCH_SIZE = 500;
 
 interface ILegacyInvoice {
@@ -38,7 +36,7 @@ async function findCompanyIdsByRegistrationNumber(): Promise<Map<string, Types.O
     return byRegistrationNumber;
 }
 
-async function backfill(dryRun: boolean) {
+export async function backfill(dryRun: boolean) {
     const companyIds = await findCompanyIdsByRegistrationNumber();
 
     // Use the raw collection so documents that fail other (newer) schema rules can still be updated
@@ -108,10 +106,12 @@ async function backfill(dryRun: boolean) {
         ambiguous.forEach((invoice) => console.log(describe(invoice)));
     }
 
-    return unmatched.length + ambiguous.length;
+    return { scanned, updated, unmatched: unmatched.length, ambiguous: ambiguous.length, skipped: unmatched.length + ambiguous.length };
 }
 
 async function main() {
+    dotenv.config();
+
     if (!process.env.DATABASE_CONNECTION_STRING || !process.env.DATABASE_NAME) {
         console.error("Missing required environment variables: DATABASE_CONNECTION_STRING and DATABASE_NAME");
         process.exit(1);
@@ -128,14 +128,16 @@ async function main() {
     console.log(`Database: ${name} on ${host}${dryRun ? " (dry run)" : ""}`);
 
     try {
-        const skipped = await backfill(dryRun);
+        const { skipped } = await backfill(dryRun);
         process.exitCode = skipped > 0 ? 2 : 0;
     } finally {
         await mongoose.disconnect();
     }
 }
 
-main().catch((error) => {
-    console.error(error);
-    process.exit(1);
-});
+if (require.main === module) {
+    main().catch((error) => {
+        console.error(error);
+        process.exit(1);
+    });
+}
