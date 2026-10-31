@@ -1,7 +1,7 @@
 import { inject } from "inversify";
 import { InvoiceService } from "../services/invoice.service";
 import { ICreateInvoice, IInvoice, IUpdateInvoice } from "../models/invoice.interface";
-import { IInvoicePagination } from "../models/invoicePagination.interface";
+import { IPaginatedResult, IPagination } from "../models/pagination.interface";
 import { matchedData } from "express-validator";
 import { Request } from "express";
 import { Document } from "mongoose";
@@ -16,8 +16,8 @@ export class InvoiceController {
         return await this.invoiceService.createInvoice(validatedData);
     }
 
-    public async handleGetInvoices(req: Request): Promise<{ data: IInvoice[]; meta: {} }> {
-        const pagination = matchedData<Partial<IInvoicePagination>>(req, { locations: ["query"] });
+    public async handleGetInvoices(req: Request): Promise<IPaginatedResult<IInvoice>> {
+        const pagination = matchedData<Partial<IPagination>>(req, { locations: ["query"] });
         return await this.invoiceService.findInvoices(pagination);
     }
 

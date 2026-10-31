@@ -20,23 +20,21 @@ export function responseFormatter(
 
     res.json = (data: any): Response => {
         const statusCode = res.statusCode ? res.statusCode : StatusCodes.OK;
+        const isError = statusCode >= StatusCodes.BAD_REQUEST;
 
         const response: IResponse = {
-            status: statusCode >= 200 && statusCode < 300 ? "success" : "error",
+            status: isError ? "error" : "success",
             statusCode: statusCode,
             message: getReasonPhrase(statusCode),
         };
 
-        if (statusCode >= 200 && statusCode < 300) {
-            response.data = data?.meta ? data.data : data;
-        }
-
-        if (statusCode >= 300) {
+        if (isError) {
             response.error = data;
-        }
-
-        if (data?.meta) {
+        } else if (data?.meta) {
+            response.data = data.data;
             response.meta = data.meta;
+        } else {
+            response.data = data;
         }
 
         return result(response);
