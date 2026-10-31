@@ -49,11 +49,22 @@ export const createInvoiceValidator = checkSchema({
     },
     amount: {
         in: ["body"],
-        isFloat: {
-            options: { min: 0 },
-            errorMessage: "Invoice amount must be a non-negative number",
+        isInt: {
+            options: { min: 0, max: Number.MAX_SAFE_INTEGER },
+            errorMessage: "Invoice amount must be a non-negative whole number in the currency's minor unit (e.g. 15050 for 150.50)",
         },
-        toFloat: true,
+        toInt: true,
+    },
+    currency: {
+        in: ["body"],
+        isString: {
+            errorMessage: "Currency must be a string",
+        },
+        trim: true,
+        toUpperCase: true,
+        isISO4217: {
+            errorMessage: "Currency must be a valid ISO 4217 code, e.g. NGN or USD",
+        },
     },
     companyId: {
         in: ["body"],
