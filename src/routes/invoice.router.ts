@@ -6,6 +6,7 @@ import { createInvoiceValidator } from "../validators/createInvoice.validator";
 import { updateInvoiceValidator } from "../validators/updateInvoice.validator";
 import { idParamValidator, paginationValidator } from "../validators/common.validator";
 import { validateRequest } from "../middlewares/validateRequest";
+import { authorize } from "../middlewares/auth";
 
 
 export class InvoiceRouter {
@@ -55,6 +56,7 @@ export class InvoiceRouter {
          */
         this.router.post(
             "/",
+            authorize("write"),
             createInvoiceValidator,
             validateRequest,
             async (req: Request, res: Response) => {
@@ -86,6 +88,7 @@ export class InvoiceRouter {
          */
         this.router.get(
             "/",
+            authorize("read"),
             paginationValidator,
             validateRequest,
             async (req: Request, res: Response) => {
@@ -116,6 +119,7 @@ export class InvoiceRouter {
          */
         this.router.get(
             "/:id",
+            authorize("read"),
             idParamValidator,
             validateRequest,
             async (req: Request<{ id: string }>, res: Response) => {
@@ -153,6 +157,7 @@ export class InvoiceRouter {
          */
         this.router.patch(
             "/:id",
+            authorize("write"),
             idParamValidator,
             updateInvoiceValidator,
             validateRequest,
@@ -183,6 +188,7 @@ export class InvoiceRouter {
          */
         this.router.delete(
             "/:id",
+            authorize("write"),
             idParamValidator,
             validateRequest,
             async (req: Request<{ id: string }>, res: Response) => {

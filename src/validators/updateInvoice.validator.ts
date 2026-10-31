@@ -1,10 +1,14 @@
 import { checkSchema } from "express-validator";
 import { INVOICE_STATUSES } from "../models/invoice.interface";
+import { singleValue } from "./common.validator";
 
 export const updateInvoiceValidator = checkSchema({
     invoiceNumber: {
         in: ["body"],
         optional: true,
+        isString: {
+            errorMessage: "Invoice number must be a string",
+        },
         trim: true,
         notEmpty: {
             errorMessage: "Invoice number can not be empty",
@@ -24,6 +28,7 @@ export const updateInvoiceValidator = checkSchema({
     },
     issueDate: {
         in: ["body"],
+        ...singleValue("Invoice issue date"),
         optional: true,
         isISO8601: {
             errorMessage: "Invoice issue date must be a valid ISO8601 date",
@@ -32,6 +37,7 @@ export const updateInvoiceValidator = checkSchema({
     },
     dueDate: {
         in: ["body"],
+        ...singleValue("Invoice due date"),
         optional: true,
         isISO8601: {
             errorMessage: "Invoice due date must be a valid ISO8601 date",
@@ -40,6 +46,7 @@ export const updateInvoiceValidator = checkSchema({
     },
     status: {
         in: ["body"],
+        ...singleValue("Invoice status"),
         optional: true,
         isIn: {
             options: [INVOICE_STATUSES],
@@ -48,6 +55,7 @@ export const updateInvoiceValidator = checkSchema({
     },
     amount: {
         in: ["body"],
+        ...singleValue("Invoice amount"),
         optional: true,
         isInt: {
             options: { min: 0, max: Number.MAX_SAFE_INTEGER },
@@ -74,6 +82,7 @@ export const updateInvoiceValidator = checkSchema({
     },
     companyId: {
         in: ["body"],
+        ...singleValue("Company ID"),
         optional: true,
         isMongoId: {
             errorMessage: "Company ID must be a valid MongoDB ObjectId",

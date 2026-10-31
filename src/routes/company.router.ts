@@ -6,6 +6,7 @@ import { createCompanyValidator } from "./../validators/createCompany.validator"
 import { updateCompanyValidator } from "../validators/updateCompany.validator";
 import { idParamValidator, paginationValidator } from "../validators/common.validator";
 import { validateRequest } from "../middlewares/validateRequest";
+import { authorize } from "../middlewares/auth";
 
 export class CompanyRouter {
     public router: Router;
@@ -50,6 +51,7 @@ export class CompanyRouter {
          */
         this.router.post(
             "/",
+            authorize("write"),
             createCompanyValidator,
             validateRequest,
             async (req: Request, res: Response) => {
@@ -81,6 +83,7 @@ export class CompanyRouter {
          */
         this.router.get(
             "/",
+            authorize("read"),
             paginationValidator,
             validateRequest,
             async (req: Request, res: Response) => {
@@ -111,6 +114,7 @@ export class CompanyRouter {
          */
         this.router.get(
             "/:id",
+            authorize("read"),
             idParamValidator,
             validateRequest,
             async (req: Request<{ id: string }>, res: Response) => {
@@ -148,6 +152,7 @@ export class CompanyRouter {
          */
         this.router.patch(
             "/:id",
+            authorize("write"),
             idParamValidator,
             updateCompanyValidator,
             validateRequest,
@@ -175,6 +180,7 @@ export class CompanyRouter {
          */
         this.router.delete(
             "/:id",
+            authorize("write"),
             idParamValidator,
             validateRequest,
             async (req: Request<{ id: string }>, res: Response) => {

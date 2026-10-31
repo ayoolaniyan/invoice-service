@@ -1,6 +1,7 @@
 import swaggerJsdoc from 'swagger-jsdoc';
 import { INVOICE_STATUSES } from '../models/invoice.interface';
 import { API_PREFIX } from './routes.config';
+import { API_KEY_HEADER } from '../middlewares/auth';
 
 const invoiceInputProperties = {
     invoiceNumber: {
@@ -117,6 +118,7 @@ const options: swaggerJsdoc.Options = {
                 name: 'Olaniyan A. O',
             },
         },
+        security: [{ ApiKeyAuth: [] }],
         servers: [
             {
                 url: API_PREFIX,
@@ -159,6 +161,17 @@ const options: swaggerJsdoc.Options = {
                 BadRequest: errorResponse('Validation error or invalid ID'),
                 NotFound: errorResponse('Resource not found'),
                 Conflict: errorResponse('Request conflicts with the current state of the resource'),
+                Unauthorized: errorResponse(`Missing or invalid ${API_KEY_HEADER} header`),
+                Forbidden: errorResponse('The API key does not have the "write" role'),
+                TooManyRequests: errorResponse('Rate limit exceeded; retry after the time in the Retry-After header'),
+            },
+            securitySchemes: {
+                ApiKeyAuth: {
+                    type: 'apiKey',
+                    in: 'header',
+                    name: API_KEY_HEADER,
+                    description: 'Keys have a role: "read" keys can only use GET endpoints, "write" keys can use all endpoints.',
+                },
             },
             schemas: {
                 Invoice: {
@@ -259,4 +272,25 @@ const options: swaggerJsdoc.Options = {
     apis: ['./src/routes/*.ts'], // Path to the API routes
 };
 
-export const swaggerSpec = swaggerJsdoc(options);
+type OperationResponses = Record<string, Record<string, unknown>>;
+
+// Every operation needs an API key and is rate limited, and writes need the "write" role,
+// so add those responses here instead of repeating them in each route's docs
+function addSecurityResponses(spec: object): object {
+    const paths = (spec as { paths?: Record<string, Record<string, { responses?: OperationResponses }>> }).paths ?? {};
+
+    for (const operations of Object.values(paths)) {
+        for (const [method, operation] of Object.entries(operations)) {
+            operation.responses ??= {};
+            operation.responses['401'] ??= { $ref: '#/components/responses/Unauthorized' };
+            if (method !== 'get') {
+                operation.responses['403'] ??= { $ref: '#/components/responses/Forbidden' };
+            }
+            operation.responses['429'] ??= { $ref: '#/components/responses/TooManyRequests' };
+        }
+    }
+
+    return spec;
+}
+
+export const swaggerSpec = addSecurityResponses(swaggerJsdoc(options));
