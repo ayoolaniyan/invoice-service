@@ -3,41 +3,53 @@ import { checkSchema } from "express-validator";
 export const createCompanyValidator = checkSchema({
     name: {
         in: ["body"],
-        notEmpty: true,
-        errorMessage: "Company name is required",
-        isString: true,
-        isLength: {
-            options: {
-
-            },
-            errorMessage: "Company name can not be more than 100 characters"
+        isString: {
+            errorMessage: "Company name must be a string",
         },
         trim: true,
+        notEmpty: {
+            errorMessage: "Company name is required",
+        },
+        isLength: {
+            options: { max: 100 },
+            errorMessage: "Company name can not be more than 100 characters",
+        },
     },
     registrationNumber: {
         in: ["body"],
-        notEmpty: true,
-        errorMessage: "Company registration Number is required",
-        isString: true,
+        isString: {
+            errorMessage: "Company registration number must be a string",
+        },
         trim: true,
+        notEmpty: {
+            errorMessage: "Company registration number is required",
+        },
     },
     email: {
         in: ["body"],
-        optional: true,
-        errorMessage: "Company email is required",
-        isString: true,
         trim: true,
+        isEmail: {
+            errorMessage: "Company email must be a valid email address",
+        },
     },
     phone: {
         in: ["body"],
-        errorMessage: "Issue date must be a valid ISO8601 string",
-        isString: true,
-        trim: true
+        isString: {
+            errorMessage: "Company phone must be a string",
+        },
+        trim: true,
+        notEmpty: {
+            errorMessage: "Company phone is required",
+        },
     },
     address: {
         in: ["body"],
-        notEmpty: true,
-        errorMessage: "Company address must be specified",
-        trim: true
+        isString: {
+            errorMessage: "Company address must be a string",
+        },
+        trim: true,
+        notEmpty: {
+            errorMessage: "Company address is required",
+        },
     },
 });

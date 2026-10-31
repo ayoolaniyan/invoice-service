@@ -1,8 +1,9 @@
 import express, { Express, Request, Response } from "express";
 import mongoose from "mongoose";
 import * as dotenv from "dotenv";
-import cors, { CorsOptions } from "cors";
+import cors from "cors";
 import { responseFormatter } from "./src/middlewares/responseFormatter";
+import { errorHandler, notFoundHandler } from "./src/middlewares/errorHandler";
 import morgan from "morgan";
 import { addRoutes } from "./src/config/routes.config";
 import swaggerUi from 'swagger-ui-express';
@@ -30,9 +31,13 @@ app.get("/", (req: Request, res: Response) => {
 
 addRoutes(app);
 
+app.use(notFoundHandler);
+
+app.use(errorHandler);
+
 async function bootstrap() {
     if (!process.env.DATABASE_CONNECTION_STRING || !process.env.DATABASE_NAME || !process.env.PORT) {
-        throw new Error("Can not read evironment variable");
+        console.error("Missing required environment variables: DATABASE_CONNECTION_STRING, DATABASE_NAME and PORT");
         process.exit(1);
     }
 

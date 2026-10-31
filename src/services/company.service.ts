@@ -3,6 +3,7 @@ import { Model } from "mongoose";
 import { ICompany, IPartialCompanyWithId } from "./../models/company.interface";
 import { Company } from "./../models/company.schema";
 import { ICompanyPagination } from "./../models/companyPagination.interface";
+import { NotFoundError } from "../errors/app.error";
 
 
 @injectable()
@@ -17,18 +18,18 @@ export class CompanyService {
         return await this.companyModel
             .find()
             .limit(pagination.limit)
-            .skip(pagination.page - 1)
+            .skip((pagination.page - 1) * pagination.limit)
             .sort({
                 createdAt: pagination.order === "asc" ? 1 : -1,
             });
     }
 
     public async getCompanyById(_id: string) {
-        const comapny = await this.companyModel.findById(_id);
-        if (!comapny) {
-            throw new Error(`Comapny with ID ${_id} not found`);
+        const company = await this.companyModel.findById(_id);
+        if (!company) {
+            throw new NotFoundError(`Company with ID ${_id} not found`);
         }
-        return comapny;
+        return company;
     }
 
     public async updateCompany(companyData: IPartialCompanyWithId) {
@@ -41,7 +42,7 @@ export class CompanyService {
         );
 
         if (!updatedCompany) {
-            throw new Error(`company with id ${_id} inot found!`)
+            throw new NotFoundError(`Company with ID ${_id} not found`);
         }
         return updatedCompany;
     }
@@ -50,7 +51,7 @@ export class CompanyService {
         const deletedCompany = await this.companyModel.findByIdAndDelete(_id);
 
         if (!deletedCompany) {
-            throw new Error(`Company with ID ${_id} not found`);
+            throw new NotFoundError(`Company with ID ${_id} not found`);
         }
 
         return deletedCompany;

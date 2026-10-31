@@ -1,11 +1,11 @@
 import { inject } from "inversify";
 import express, { Request, Response, Router } from "express";
 import { CompanyController } from "./../controllers/company.controller";
-import { validationResult } from "express-validator";
 import { StatusCodes } from "http-status-codes";
 import { createCompanyValidator } from "./../validators/createCompany.validator";
-import { ICompany } from "./../models/company.interface";
 import { updateCompanyValidator } from "../validators/updateCompany.validator";
+import { idParamValidator, paginationValidator } from "../validators/common.validator";
+import { validateRequest } from "../middlewares/validateRequest";
 
 export class CompanyRouter {
     public router: Router;
@@ -22,71 +22,56 @@ export class CompanyRouter {
         this.router.post(
             "/create",
             createCompanyValidator,
-            async (req: Request<{}, {}, ICompany>, res: Response) => {
-                const result = validationResult(req);
-                if (result.isEmpty()) {
-                    const newCompany = await this.companyController.handlePostCompany(req, res);
-                    res.status(StatusCodes.CREATED).json(newCompany);
-                } else {
-                    res.status(StatusCodes.BAD_REQUEST).json(result.array());
-                }
+            validateRequest,
+            async (req: Request, res: Response) => {
+                const newCompany = await this.companyController.handlePostCompany(req);
+                res.status(StatusCodes.CREATED).json(newCompany);
             }
         );
 
         this.router.put(
             "/update/:id",
+            idParamValidator,
             updateCompanyValidator,
-            async (req: Request<{ id: string }, {}, Partial<ICompany>>, res: Response) => {
-                const result = validationResult(req);
-                if (result.isEmpty()) {
-                    try {
-                        const updateCompany = await this.companyController.updateCompany(req.params.id, req.body);
-                        res.status(StatusCodes.OK).json(updateCompany);
-                    } catch (error: any) {
-                        res.status(StatusCodes.NOT_FOUND).json({ message: error.message });
-                    }
-                } else {
-                    res.status(StatusCodes.BAD_REQUEST).json(result.array());
-                }
-            });
-
-        this.router.get("/", async (req: Request, res: Response) => {
-            const result = validationResult(req);
-            if (result.isEmpty()) {
-                const allCompany = await this.companyController.handleGetCompanies(req, res);
-                res.json(allCompany);
-            } else {
-                res.status(StatusCodes.BAD_REQUEST).json(result.array());
+            validateRequest,
+            async (req: Request<{ id: string }>, res: Response) => {
+                const updatedCompany = await this.companyController.handleUpdateCompany(req);
+                res.status(StatusCodes.OK).json(updatedCompany);
             }
+        );
 
-        });
-
-        this.router.get("/:id", async (req: Request<{ id: string }>, res: Response) => {
-            const result = validationResult(req);
-            if (result.isEmpty()) {
-                try {
-                    const company = await this.companyController.handleGetCompany(req.params.id);
-                    res.status(StatusCodes.OK).json(company);
-                } catch (error: any) {
-                    res.status(StatusCodes.NOT_FOUND).json({ message: error.message });
-                }
-            } else {
-                res.status(StatusCodes.BAD_REQUEST).json(result.array());
+        this.router.get(
+            "/",
+            paginationValidator,
+            validateRequest,
+            async (req: Request, res: Response) => {
+                const allCompanies = await this.companyController.handleGetCompanies(req);
+                res.json(allCompanies);
             }
+        );
 
-        });
+        this.router.get(
+            "/:id",
+            idParamValidator,
+            validateRequest,
+            async (req: Request<{ id: string }>, res: Response) => {
+                const company = await this.companyController.handleGetCompany(req);
+                res.status(StatusCodes.OK).json(company);
+            }
+        );
 
-        this.router.delete("/delete/:id", async (req: Request<{ id: string }>, res: Response) => {
-            try {
-                const deletedCompany = await this.companyController.handleDeleteCompany(req.params.id);
+        this.router.delete(
+            "/delete/:id",
+            idParamValidator,
+            validateRequest,
+            async (req: Request<{ id: string }>, res: Response) => {
+                const deletedCompany = await this.companyController.handleDeleteCompany(req);
                 res.status(StatusCodes.OK).json({
-                    message: "Company deleted succesfully",
+                    message: "Company deleted successfully",
                     company: deletedCompany
                 });
-            } catch (error: any) {
-                res.status(StatusCodes.NOT_FOUND).json({ message: error.message });
             }
-        });
+        );
 
     }
 }

@@ -11,7 +11,7 @@ interface IResponse {
 }
 
 export function responseFormatter(
-    re: Request,
+    req: Request,
     res: Response,
     next: NextFunction
 ) {
@@ -24,18 +24,18 @@ export function responseFormatter(
         const response: IResponse = {
             status: statusCode >= 200 && statusCode < 300 ? "success" : "error",
             statusCode: statusCode,
-            message: getReasonPhrase(res.statusCode),
+            message: getReasonPhrase(statusCode),
         };
 
         if (statusCode >= 200 && statusCode < 300) {
-            response.data = data.meta ? data.data : data;
+            response.data = data?.meta ? data.data : data;
         }
 
         if (statusCode >= 300) {
             response.error = data;
         }
 
-        if (data.meta) {
+        if (data?.meta) {
             response.meta = data.meta;
         }
 

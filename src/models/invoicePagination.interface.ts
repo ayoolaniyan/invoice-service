@@ -1,5 +1,5 @@
 export interface IInvoicePagination {
     limit: number;
     page: number;
-    order: "asc" | "dsc";
+    order: "asc" | "desc";
 }
