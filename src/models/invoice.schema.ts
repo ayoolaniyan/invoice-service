@@ -36,10 +36,22 @@ const invoiceSchema: Schema<IInvoice> = new Schema(
             },
             trim: true
         },
+        // Stored as an integer in the currency's minor unit (e.g. kobo, cents) to avoid floating point rounding errors
         amount: {
             type: Number,
             required: [true, "Amount is required"],
             min: [0, "Amount can not be negative"],
+            validate: {
+                validator: Number.isSafeInteger,
+                message: "Amount must be a whole number in the currency's minor unit",
+            },
+        },
+        currency: {
+            type: String,
+            required: [true, "Currency is required"],
+            uppercase: true,
+            trim: true,
+            match: [/^[A-Z]{3}$/, "Currency must be a 3-letter ISO 4217 code"],
         },
         companyId: {
             type: Schema.Types.ObjectId,

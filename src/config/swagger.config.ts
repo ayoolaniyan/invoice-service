@@ -28,9 +28,16 @@ const invoiceInputProperties = {
         description: 'Invoice status',
     },
     amount: {
-        type: 'number',
+        type: 'integer',
         minimum: 0,
-        description: 'Invoice amount',
+        example: 15050,
+        description: "Invoice amount as a whole number in the currency's minor unit, e.g. 15050 is NGN 150.50",
+    },
+    currency: {
+        type: 'string',
+        pattern: '^[A-Z]{3}$',
+        example: 'NGN',
+        description: 'ISO 4217 currency code. When updating, amount must be sent with it.',
     },
     companyId: {
         type: 'string',
@@ -156,7 +163,7 @@ const options: swaggerJsdoc.Options = {
             schemas: {
                 Invoice: {
                     type: 'object',
-                    required: ['_id', 'invoiceNumber', 'issueDate', 'dueDate', 'status', 'amount', 'companyId', 'companyName', 'companyRegistrationNumber'],
+                    required: ['_id', 'invoiceNumber', 'issueDate', 'dueDate', 'status', 'amount', 'currency', 'companyId', 'companyName', 'companyRegistrationNumber'],
                     properties: {
                         _id: {
                             type: 'string',
@@ -176,7 +183,7 @@ const options: swaggerJsdoc.Options = {
                 },
                 CreateInvoiceInput: {
                     type: 'object',
-                    required: ['invoiceNumber', 'issueDate', 'dueDate', 'status', 'amount', 'companyId'],
+                    required: ['invoiceNumber', 'issueDate', 'dueDate', 'status', 'amount', 'currency', 'companyId'],
                     properties: invoiceInputProperties,
                 },
                 UpdateInvoiceInput: {

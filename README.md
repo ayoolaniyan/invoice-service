@@ -88,7 +88,8 @@ Rules:
 
 - An invoice must reference an existing company through `companyId`. The company's name and registration number are copied onto the invoice by the server; values sent by the client are ignored.
 - `dueDate` can't be before `issueDate`.
-- `amount` must be 0 or more.
+- `amount` is a whole number in the currency's **minor unit** (kobo, cents, etc.), so `15050` with `NGN` means ₦150.50. Decimals are rejected. This avoids floating-point rounding errors such as `0.1 + 0.2 = 0.30000000000000004`.
+- `currency` is a required ISO 4217 code such as `NGN` or `USD`. Lower case is accepted and stored in upper case. To change it on an update, send `amount` in the same request, because the same number means a different value in another currency.
 - Only invoices with status `paid`, `cancelled` or `draft` can be deleted. Deleting any other invoice returns `409 Conflict`.
 
 Example: create an invoice
@@ -102,7 +103,8 @@ curl -X POST http://localhost:3001/api/v1/invoices \
     "issueDate": "2026-10-01",
     "dueDate": "2026-10-31",
     "status": "pending",
-    "amount": 150.5,
+    "amount": 15050,
+    "currency": "NGN",
     "companyId": "<company id>"
   }'
 ```
@@ -145,7 +147,7 @@ Error:
   "error": {
     "message": "Validation failed",
     "details": [
-      { "field": "amount", "location": "body", "message": "Invoice amount must be a non-negative number" }
+      { "field": "amount", "location": "body", "message": "Invoice amount must be a non-negative whole number in the currency's minor unit (e.g. 15050 for 150.50)" }
     ]
   }
 }
@@ -183,9 +185,17 @@ A request goes through: router → validators → `validateRequest` → controll
 | `npm run start:dev` | Start with nodemon and ts-node |
 | `npm run build` | Compile TypeScript to `dist/` |
 | `npm start` | Run the compiled app |
-| `npm run migrate:backfill-company-id` | Set `companyId` on invoices created before it was stored. Add `-- --dry-run` to see what would change without writing anything |
+| `npm run migrate:backfill-company-id` | Set `companyId` on invoices created before it was stored |
+| `npm run migrate:amounts-to-minor-units -- --currency NGN` | Convert decimal amounts on invoices created before currencies were stored (e.g. `150.5` → `15050`) and set their currency |
 
-The migration matches invoices to companies by registration number. It skips and lists any invoice it can't match to exactly one company, and exits with code `2` if it skipped any. It uses the database in your environment or `.env`, and prints which one before it does anything, so check that before running it without `--dry-run`.
+Notes on the migrations:
+
+- Add `-- --dry-run` (or `--dry-run` after the other arguments) to see what would change without writing anything.
+- Both are safe to run again: they only touch invoices that haven't been migrated yet.
+- They never guess. Invoices they can't migrate are skipped and listed, and the script exits with code `2`.
+  - `backfill-company-id` matches invoices to companies by registration number, and skips any invoice that doesn't match exactly one company.
+  - `amounts-to-minor-units` skips any amount it can't convert exactly, e.g. `1.005` in a currency with 2 decimal places. It takes the decimal places from the currency (0 for JPY, 3 for KWD); `--minor-digits <n>` overrides that.
+- They use the database in your environment or `.env`, and print which one before doing anything, so check that before running without `--dry-run`.
 
 ## Roadmap
 
@@ -196,10 +206,11 @@ Done:
 - Typed errors and a central error handler
 - RESTful, versioned routes with pagination metadata
 - Swagger docs for every endpoint
+- Amounts stored as integer minor units with an ISO 4217 currency
 
 Planned:
 
-- **Data integrity:** store amounts in minor units with a currency, enforce status transitions, add unique indexes, and handle invoices when their company is deleted
+- **Data integrity:** enforce status transitions, add unique indexes, and handle invoices when their company is deleted
 - **Security:** authentication and authorization, helmet, a CORS allowlist, rate limiting, and dependency upgrades
 - **Tests:** unit and integration tests (Jest or Vitest, Supertest, mongodb-memory-server)
 - **Operations:** Docker, CI, linting, health checks, graceful shutdown, structured logging, and Swagger docs that work from the compiled build

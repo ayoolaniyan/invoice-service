@@ -10,7 +10,10 @@ export interface IInvoice {
     issueDate: Date;
     dueDate: Date;
     status: InvoiceStatus;
+    /** Integer amount in the currency's minor unit, e.g. kobo for NGN or cents for USD */
     amount: number;
+    /** ISO 4217 currency code, e.g. NGN */
+    currency: string;
     companyId: Types.ObjectId;
     companyName: string;
     companyRegistrationNumber: string;
@@ -25,6 +28,7 @@ export interface ICreateInvoice {
     dueDate: Date;
     status: InvoiceStatus;
     amount: number;
+    currency: string;
     companyId: string;
 }
 
