@@ -1,90 +1,105 @@
 // Must be first so every module below sees the variables from .env
 import "dotenv/config";
-import express, { Express, Request, Response } from "express";
+import { Server } from "http";
 import mongoose from "mongoose";
-import cors from "cors";
-import helmet from "helmet";
-import { responseFormatter } from "./src/middlewares/responseFormatter";
-import { errorHandler, notFoundHandler } from "./src/middlewares/errorHandler";
-import { createRateLimiter } from "./src/middlewares/rateLimiter";
-import morgan from "morgan";
-import { addRoutes } from "./src/config/routes.config";
+import { createApp } from "./src/app";
 import { getApiKeys } from "./src/config/auth.config";
-import { getCorsOptions, getTrustProxy, isApiDocsEnabled } from "./src/config/security.config";
-import swaggerUi from 'swagger-ui-express';
-import { swaggerSpec } from './src/config/swagger.config';
+import { logger } from "./src/config/logger.config";
+import { markShuttingDown } from "./src/routes/health.router";
 
-// Treat any "$"-prefixed keys in query filters as literal values, not operators (NoSQL injection)
-mongoose.set("sanitizeFilter", true);
-mongoose.set("strictQuery", true);
+const SHUTDOWN_TIMEOUT_MS = 10_000;
 
-const app: Express = express();
+let server: Server | undefined;
+let shuttingDown = false;
 
-app.set("trust proxy", getTrustProxy());
+function validateEnvironment() {
+    const missing = ["DATABASE_CONNECTION_STRING", "DATABASE_NAME", "PORT"].filter((name) => !process.env[name]);
+    if (missing.length > 0) {
+        logger.fatal({ missing }, "Missing required environment variables");
+        process.exit(1);
+    }
 
-// The API serves JSON; the only HTML is the Swagger UI, whose assets would fail to load
-// over plain HTTP (e.g. a staging host without TLS) if requests were upgraded to HTTPS
-app.use(helmet({
-    contentSecurityPolicy: {
-        directives: { upgradeInsecureRequests: null },
-    },
-}));
-
-app.use(morgan('dev'));
-
-// Before anything that can respond, so every JSON response gets the same format
-app.use(responseFormatter);
-
-app.use(cors(getCorsOptions()));
-
-app.use(createRateLimiter());
-
-app.use(express.json({ limit: "100kb" }));
-
-if (isApiDocsEnabled()) {
-    app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
-}
-
-app.get("/", (req: Request, res: Response) => {
-    res.send("Express + TypeScript Server");
-});
-
-addRoutes(app);
-
-app.use(notFoundHandler);
-
-app.use(errorHandler);
-
-async function bootstrap() {
-    if (!process.env.DATABASE_CONNECTION_STRING || !process.env.DATABASE_NAME || !process.env.PORT) {
-        console.error("Missing required environment variables: DATABASE_CONNECTION_STRING, DATABASE_NAME and PORT");
+    const port = Number(process.env.PORT);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) {
+        logger.fatal({ port: process.env.PORT }, "PORT must be a whole number from 1 to 65535");
         process.exit(1);
     }
 
     try {
         const apiKeys = getApiKeys();
-        console.log(`Loaded ${apiKeys.length} API key(s): ${apiKeys.map((key) => `${key.name} (${key.role})`).join(", ")}`);
+        logger.info({ apiKeys: apiKeys.map((key) => `${key.name} (${key.role})`) }, "Loaded API keys");
     } catch (error) {
-        console.error(`Invalid API_KEYS: ${(error as Error).message}`);
+        logger.fatal({ reason: (error as Error).message }, "Invalid API_KEYS");
         process.exit(1);
     }
 
+    return port;
+}
+
+async function shutdown(signal: string) {
+    if (shuttingDown) {
+        return;
+    }
+    shuttingDown = true;
+    markShuttingDown();
+    logger.info({ signal }, "Shutting down: no longer accepting new connections");
+
+    // If open requests don't finish in time, exit anyway so the orchestrator can restart us
+    const forceExit = setTimeout(() => {
+        logger.error({ timeoutMs: SHUTDOWN_TIMEOUT_MS }, "Shutdown timed out, forcing exit");
+        process.exit(1);
+    }, SHUTDOWN_TIMEOUT_MS);
+    forceExit.unref();
+
     try {
-        await mongoose.connect(
-            process.env.DATABASE_CONNECTION_STRING,
-            {
-                dbName: process.env.DATABASE_NAME,
-            }
-        );
-        console.log("Connected to MongoDB");
-        const port = process.env.PORT;
-        app.listen(port, () => {
-            console.log(`[server]: Server is running at http://localhost:${port}`);
-        });
+        if (server) {
+            await new Promise<void>((resolve, reject) => server!.close((error) => (error ? reject(error) : resolve())));
+        }
+        await mongoose.disconnect();
+        logger.info("Shutdown complete");
+        process.exit(0);
     } catch (error) {
-        console.log(error);
+        logger.error({ err: error }, "Error during shutdown");
         process.exit(1);
     }
 }
+
+async function bootstrap() {
+    const port = validateEnvironment();
+
+    mongoose.connection.on("disconnected", () => {
+        if (!shuttingDown) {
+            logger.warn("Lost connection to MongoDB, retrying");
+        }
+    });
+    mongoose.connection.on("reconnected", () => logger.info("Reconnected to MongoDB"));
+
+    try {
+        await mongoose.connect(process.env.DATABASE_CONNECTION_STRING!, {
+            dbName: process.env.DATABASE_NAME,
+        });
+        logger.info({ database: mongoose.connection.name }, "Connected to MongoDB");
+    } catch (error) {
+        logger.fatal({ err: error }, "Could not connect to MongoDB");
+        process.exit(1);
+    }
+
+    server = createApp().listen(port, () => {
+        logger.info({ port }, `Server is running at http://localhost:${port}`);
+    });
+}
+
+process.on("SIGTERM", () => void shutdown("SIGTERM"));
+process.on("SIGINT", () => void shutdown("SIGINT"));
+
+// An unknown error may have left the app in a bad state, so log it and let the orchestrator restart us
+process.on("unhandledRejection", (reason) => {
+    logger.fatal({ err: reason }, "Unhandled promise rejection");
+    process.exit(1);
+});
+process.on("uncaughtException", (error) => {
+    logger.fatal({ err: error }, "Uncaught exception");
+    process.exit(1);
+});
 
 bootstrap();

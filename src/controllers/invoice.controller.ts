@@ -1,4 +1,4 @@
-import { inject } from "inversify";
+import { inject, injectable } from "inversify";
 import { InvoiceService } from "../services/invoice.service";
 import { ICreateInvoice, IInvoice, IUpdateInvoice } from "../models/invoice.interface";
 import { IPaginatedResult, IPagination } from "../models/pagination.interface";
@@ -6,6 +6,7 @@ import { matchedData } from "express-validator";
 import { Request } from "express";
 import { Document } from "mongoose";
 
+@injectable()
 export class InvoiceController {
     constructor(
         @inject(InvoiceService) private invoiceService: InvoiceService,

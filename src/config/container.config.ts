@@ -1,3 +1,4 @@
+import "reflect-metadata";
 import { Container } from "inversify";
 import { CompanyController } from "./../controllers/company.controller";
 import { CompanyRouter } from "./../routes/company.router";

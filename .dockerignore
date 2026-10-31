@@ -1,0 +1,14 @@
+# Keep secrets, local builds and tooling out of the image and the build context
+.env
+.env.*
+!.env.example
+.git
+.github
+node_modules
+dist
+coverage
+tests
+*.log
+.DS_Store
+Dockerfile
+docker-compose.yml

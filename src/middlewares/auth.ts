@@ -5,11 +5,10 @@ import { ForbiddenError, UnauthorizedError } from "../errors/app.error";
 
 export const API_KEY_HEADER = "X-API-Key";
 
-declare global {
-    namespace Express {
-        interface Request {
-            apiClient?: IApiClient;
-        }
+// Adds the authenticated client to Express's Request type
+declare module "express-serve-static-core" {
+    interface Request {
+        apiClient?: IApiClient;
     }
 }
 

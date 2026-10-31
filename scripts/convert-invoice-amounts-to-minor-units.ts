@@ -16,8 +16,7 @@
 import mongoose, { mongo, Types } from "mongoose";
 import * as dotenv from "dotenv";
 import { Invoice } from "../src/models/invoice.schema";
-
-dotenv.config();
+import { getMinorDigits, SUPPORTED_CURRENCIES, toMinorUnits } from "../src/utils/money";
 
 const BATCH_SIZE = 500;
 
@@ -32,34 +31,7 @@ function getArgument(name: string): string | undefined {
     return index === -1 ? undefined : process.argv[index + 1];
 }
 
-// Available since Node 18, but not in the ES2020 lib this project compiles against
-const supportedCurrencies: string[] = (Intl as unknown as { supportedValuesOf(key: "currency"): string[] }).supportedValuesOf("currency");
-
-function getMinorDigits(currency: string): number {
-    return new Intl.NumberFormat("en", { style: "currency", currency }).resolvedOptions().maximumFractionDigits ?? 2;
-}
-
-// Converts using the number's decimal text, because multiplying is inexact (1.005 * 100 === 100.49999999999999)
-export function toMinorUnits(amount: unknown, minorDigits: number): number | null {
-    if (typeof amount !== "number" || !Number.isFinite(amount) || amount < 0) {
-        return null;
-    }
-
-    const text = amount.toString();
-    if (/e/i.test(text)) {
-        return null;
-    }
-
-    const [whole, fraction = ""] = text.split(".");
-    if (fraction.length > minorDigits) {
-        return null;
-    }
-
-    const minorUnits = Number(whole + fraction.padEnd(minorDigits, "0"));
-    return Number.isSafeInteger(minorUnits) ? minorUnits : null;
-}
-
-async function convert(currency: string, minorDigits: number, dryRun: boolean) {
+export async function convert(currency: string, minorDigits: number, dryRun: boolean) {
     // Use the raw collection so documents that fail the new schema rules can still be updated
     const cursor = Invoice.collection.find<ILegacyInvoice>(
         { currency: { $exists: false } },
@@ -121,17 +93,19 @@ async function convert(currency: string, minorDigits: number, dryRun: boolean) {
         );
     }
 
-    return skipped.length;
+    return { scanned, converted, skipped: skipped.length };
 }
 
 async function main() {
+    dotenv.config();
+
     if (!process.env.DATABASE_CONNECTION_STRING || !process.env.DATABASE_NAME) {
         console.error("Missing required environment variables: DATABASE_CONNECTION_STRING and DATABASE_NAME");
         process.exit(1);
     }
 
     const currency = getArgument("--currency")?.toUpperCase();
-    if (!currency || !supportedCurrencies.includes(currency)) {
+    if (!currency || !SUPPORTED_CURRENCIES.includes(currency)) {
         console.error("Pass the currency the existing amounts are in, e.g. --currency NGN");
         process.exit(1);
     }
@@ -155,7 +129,7 @@ async function main() {
     console.log(`Currency: ${currency}, ${minorDigits} decimal places (1 ${currency} = ${10 ** minorDigits} minor units)`);
 
     try {
-        const skipped = await convert(currency, minorDigits, dryRun);
+        const { skipped } = await convert(currency, minorDigits, dryRun);
         process.exitCode = skipped > 0 ? 2 : 0;
     } finally {
         await mongoose.disconnect();
