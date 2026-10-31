@@ -4,7 +4,7 @@ import { ICreateInvoice, IInvoice, IPartialInvoiceWithId } from "../models/invoi
 import { Invoice } from "../models/invoice.schema";
 import { ICompany } from "../models/company.interface";
 import { Company } from "../models/company.schema";
-import { IInvoicePagination } from "../models/invoicePagination.interface";
+import { buildPaginationMeta, IPaginatedResult, IPagination, resolvePagination } from "../models/pagination.interface";
 import { ConflictError, NotFoundError } from "../errors/app.error";
 
 @injectable()
@@ -77,7 +77,7 @@ export class InvoiceService {
         return deletedInvoice;
     }
 
-    public async getInvoices(pagination: IInvoicePagination) {
+    public async getInvoices(pagination: IPagination) {
         return await this.invoiceModel
             .find()
             .limit(pagination.limit)
@@ -87,16 +87,17 @@ export class InvoiceService {
             });
     }
 
-    public async findInvoices(pagination: Partial<IInvoicePagination>): Promise<{ data: IInvoice[]; meta: {} }> {
-        const invoices: IInvoice[] = await this.getInvoices({
-            limit: pagination.limit ?? 10,
-            page: pagination.page ?? 1,
-            order: pagination.order ?? "asc",
-        });
+    public async findInvoices(pagination: Partial<IPagination>): Promise<IPaginatedResult<IInvoice>> {
+        const resolvedPagination = resolvePagination(pagination);
+
+        const [invoices, total] = await Promise.all([
+            this.getInvoices(resolvedPagination),
+            this.invoiceModel.countDocuments(),
+        ]);
 
         return {
             data: invoices,
-            meta: {},
+            meta: buildPaginationMeta(resolvedPagination, total),
         };
     }
 }

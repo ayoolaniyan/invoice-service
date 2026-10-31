@@ -2,7 +2,7 @@ import { injectable } from "inversify";
 import { Model } from "mongoose";
 import { ICompany, IPartialCompanyWithId } from "./../models/company.interface";
 import { Company } from "./../models/company.schema";
-import { ICompanyPagination } from "./../models/companyPagination.interface";
+import { buildPaginationMeta, IPaginatedResult, IPagination, resolvePagination } from "./../models/pagination.interface";
 import { NotFoundError } from "../errors/app.error";
 
 
@@ -14,7 +14,7 @@ export class CompanyService {
         return await new this.companyModel(data).save();
     }
 
-    public async getCompanies(pagination: ICompanyPagination) {
+    public async getCompanies(pagination: IPagination) {
         return await this.companyModel
             .find()
             .limit(pagination.limit)
@@ -57,17 +57,17 @@ export class CompanyService {
         return deletedCompany;
     }
 
-    public async findCompanies(pagination: Partial<ICompanyPagination>): Promise<{ data: ICompany[]; meta: {} }> {
-        const companies: ICompany[] = await this.getCompanies({
-            limit: pagination.limit ?? 10,
-            page: pagination.page ?? 1,
-            order: pagination.order ?? "asc",
-        });
+    public async findCompanies(pagination: Partial<IPagination>): Promise<IPaginatedResult<ICompany>> {
+        const resolvedPagination = resolvePagination(pagination);
+
+        const [companies, total] = await Promise.all([
+            this.getCompanies(resolvedPagination),
+            this.companyModel.countDocuments(),
+        ]);
 
         return {
             data: companies,
-            meta: {},
+            meta: buildPaginationMeta(resolvedPagination, total),
         };
-
     }
 }

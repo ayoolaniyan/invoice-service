@@ -1,6 +1,6 @@
 import { inject } from "inversify";
 import { ICompany } from "./../models/company.interface";
-import { ICompanyPagination } from "./../models/companyPagination.interface";
+import { IPaginatedResult, IPagination } from "./../models/pagination.interface";
 import { Request } from "express";
 import { matchedData } from "express-validator";
 import { CompanyService } from "./../services/company.service";
@@ -16,8 +16,8 @@ export class CompanyController {
         return await this.companyService.createCompany(validatedData);
     }
 
-    public async handleGetCompanies(req: Request): Promise<{ data: ICompany[]; meta: {} }> {
-        const pagination = matchedData<Partial<ICompanyPagination>>(req, { locations: ["query"] });
+    public async handleGetCompanies(req: Request): Promise<IPaginatedResult<ICompany>> {
+        const pagination = matchedData<Partial<IPagination>>(req, { locations: ["query"] });
         return await this.companyService.findCompanies(pagination);
     }
 

@@ -22,7 +22,7 @@ export class InvoiceRouter {
 
         /**
          * @swagger
-         * /invoice/create:
+         * /invoices:
          *   post:
          *     summary: Create a new invoice
          *     tags: [Invoices]
@@ -34,121 +34,85 @@ export class InvoiceRouter {
          *             $ref: '#/components/schemas/CreateInvoiceInput'
          *     responses:
          *       201:
-         *         description: Invoice created successfully
+         *         description: Invoice created
+         *         headers:
+         *           Location:
+         *             description: URL of the new invoice
+         *             schema:
+         *               type: string
          *         content:
          *           application/json:
          *             schema:
-         *               $ref: '#/components/schemas/Invoice'
+         *               $ref: '#/components/schemas/InvoiceResponse'
          *       400:
-         *         description: Validation error
-         *         content:
-         *           application/json:
-         *             schema:
-         *               $ref: '#/components/schemas/Error'
+         *         $ref: '#/components/responses/BadRequest'
          *       404:
          *         description: Company not found
          *         content:
          *           application/json:
          *             schema:
-         *               $ref: '#/components/schemas/Error'
+         *               $ref: '#/components/schemas/ErrorResponse'
          */
         this.router.post(
-            "/create",
+            "/",
             createInvoiceValidator,
             validateRequest,
             async (req: Request, res: Response) => {
                 const newInvoice = await this.invoiceController.handlePostInvoice(req);
+                res.location(`${req.baseUrl}/${newInvoice._id}`);
                 res.status(StatusCodes.CREATED).json(newInvoice);
-            }
-        );
-
-        this.router.put(
-            "/update/:id",
-            idParamValidator,
-            updateInvoiceValidator,
-            validateRequest,
-            async (req: Request<{ id: string }>, res: Response) => {
-                const updatedInvoice = await this.invoiceController.handleUpdateInvoice(req);
-                res.status(StatusCodes.OK).json(updatedInvoice);
             }
         );
 
         /**
          * @swagger
-         * /invoice:
+         * /invoices:
          *   get:
-         *     summary: Get all invoices
+         *     summary: List invoices
          *     tags: [Invoices]
          *     parameters:
-         *       - in: query
-         *         name: page
-         *         schema:
-         *           type: integer
-         *           minimum: 1
-         *         description: Page number
-         *       - in: query
-         *         name: limit
-         *         schema:
-         *           type: integer
-         *           minimum: 1
-         *           maximum: 100
-         *         description: Items per page
-         *       - in: query
-         *         name: order
-         *         schema:
-         *           type: string
-         *           enum: [asc, desc]
-         *         description: Sort order by creation date
+         *       - $ref: '#/components/parameters/Page'
+         *       - $ref: '#/components/parameters/Limit'
+         *       - $ref: '#/components/parameters/Order'
          *     responses:
          *       200:
-         *         description: List of invoices
+         *         description: A page of invoices
          *         content:
          *           application/json:
          *             schema:
-         *               type: array
-         *               items:
-         *                 $ref: '#/components/schemas/Invoice'
+         *               $ref: '#/components/schemas/InvoiceListResponse'
          *       400:
-         *         description: Invalid query parameters
-         *         content:
-         *           application/json:
-         *             schema:
-         *               $ref: '#/components/schemas/Error'
+         *         $ref: '#/components/responses/BadRequest'
          */
         this.router.get(
             "/",
             paginationValidator,
             validateRequest,
             async (req: Request, res: Response) => {
-                const allInvoices = await this.invoiceController.handleGetInvoices(req);
-                res.json(allInvoices);
+                const invoices = await this.invoiceController.handleGetInvoices(req);
+                res.status(StatusCodes.OK).json(invoices);
             }
         );
 
         /**
          * @swagger
-         * /invoice/{id}:
+         * /invoices/{id}:
          *   get:
-         *     summary: Get invoice by ID
+         *     summary: Get an invoice by ID
          *     tags: [Invoices]
          *     parameters:
-         *       - in: path
-         *         name: id
-         *         required: true
-         *         schema:
-         *           type: string
-         *         description: Invoice ID
+         *       - $ref: '#/components/parameters/Id'
          *     responses:
          *       200:
-         *         description: Invoice found
+         *         description: The invoice
          *         content:
          *           application/json:
          *             schema:
-         *               $ref: '#/components/schemas/Invoice'
+         *               $ref: '#/components/schemas/InvoiceResponse'
          *       400:
-         *         description: Invalid invoice ID
+         *         $ref: '#/components/responses/BadRequest'
          *       404:
-         *         description: Invoice not found
+         *         $ref: '#/components/responses/NotFound'
          */
         this.router.get(
             "/:id",
@@ -160,16 +124,70 @@ export class InvoiceRouter {
             }
         );
 
+        /**
+         * @swagger
+         * /invoices/{id}:
+         *   patch:
+         *     summary: Update an invoice
+         *     description: Only the fields sent are changed. Sending companyId moves the invoice to that company and copies its name and registration number.
+         *     tags: [Invoices]
+         *     parameters:
+         *       - $ref: '#/components/parameters/Id'
+         *     requestBody:
+         *       required: true
+         *       content:
+         *         application/json:
+         *           schema:
+         *             $ref: '#/components/schemas/UpdateInvoiceInput'
+         *     responses:
+         *       200:
+         *         description: The updated invoice
+         *         content:
+         *           application/json:
+         *             schema:
+         *               $ref: '#/components/schemas/InvoiceResponse'
+         *       400:
+         *         $ref: '#/components/responses/BadRequest'
+         *       404:
+         *         $ref: '#/components/responses/NotFound'
+         */
+        this.router.patch(
+            "/:id",
+            idParamValidator,
+            updateInvoiceValidator,
+            validateRequest,
+            async (req: Request<{ id: string }>, res: Response) => {
+                const updatedInvoice = await this.invoiceController.handleUpdateInvoice(req);
+                res.status(StatusCodes.OK).json(updatedInvoice);
+            }
+        );
+
+        /**
+         * @swagger
+         * /invoices/{id}:
+         *   delete:
+         *     summary: Delete an invoice
+         *     description: Only invoices with status paid, cancelled or draft can be deleted.
+         *     tags: [Invoices]
+         *     parameters:
+         *       - $ref: '#/components/parameters/Id'
+         *     responses:
+         *       204:
+         *         description: Invoice deleted
+         *       400:
+         *         $ref: '#/components/responses/BadRequest'
+         *       404:
+         *         $ref: '#/components/responses/NotFound'
+         *       409:
+         *         $ref: '#/components/responses/Conflict'
+         */
         this.router.delete(
-            "/delete/:id",
+            "/:id",
             idParamValidator,
             validateRequest,
             async (req: Request<{ id: string }>, res: Response) => {
-                const deletedInvoice = await this.invoiceController.handleDeleteInvoice(req);
-                res.status(StatusCodes.OK).json({
-                    message: "Invoice deleted successfully",
-                    invoice: deletedInvoice
-                });
+                await this.invoiceController.handleDeleteInvoice(req);
+                res.status(StatusCodes.NO_CONTENT).end();
             }
         );
 
