@@ -1,9 +1,13 @@
 import { checkSchema } from "express-validator";
 import { INVOICE_STATUSES } from "../models/invoice.interface";
+import { singleValue } from "./common.validator";
 
 export const createInvoiceValidator = checkSchema({
     invoiceNumber: {
         in: ["body"],
+        isString: {
+            errorMessage: "Invoice number must be a string",
+        },
         trim: true,
         notEmpty: {
             errorMessage: "Invoice number is required",
@@ -23,6 +27,7 @@ export const createInvoiceValidator = checkSchema({
     },
     issueDate: {
         in: ["body"],
+        ...singleValue("Invoice issue date"),
         isISO8601: {
             errorMessage: "Invoice issue date must be a valid ISO8601 date",
         },
@@ -30,6 +35,7 @@ export const createInvoiceValidator = checkSchema({
     },
     dueDate: {
         in: ["body"],
+        ...singleValue("Invoice due date"),
         isISO8601: {
             errorMessage: "Invoice due date must be a valid ISO8601 date",
         },
@@ -42,6 +48,7 @@ export const createInvoiceValidator = checkSchema({
     },
     status: {
         in: ["body"],
+        ...singleValue("Invoice status"),
         isIn: {
             options: [INVOICE_STATUSES],
             errorMessage: `Invoice status must be one of: ${INVOICE_STATUSES.join(", ")}`,
@@ -49,6 +56,7 @@ export const createInvoiceValidator = checkSchema({
     },
     amount: {
         in: ["body"],
+        ...singleValue("Invoice amount"),
         isInt: {
             options: { min: 0, max: Number.MAX_SAFE_INTEGER },
             errorMessage: "Invoice amount must be a non-negative whole number in the currency's minor unit (e.g. 15050 for 150.50)",
@@ -68,6 +76,7 @@ export const createInvoiceValidator = checkSchema({
     },
     companyId: {
         in: ["body"],
+        ...singleValue("Company ID"),
         isMongoId: {
             errorMessage: "Company ID must be a valid MongoDB ObjectId",
         },

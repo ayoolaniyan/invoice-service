@@ -1,4 +1,5 @@
 import { checkSchema } from "express-validator";
+import { singleValue } from "./common.validator";
 
 export const createCompanyValidator = checkSchema({
     name: {
@@ -27,6 +28,7 @@ export const createCompanyValidator = checkSchema({
     },
     email: {
         in: ["body"],
+        ...singleValue("Company email"),
         trim: true,
         isEmail: {
             errorMessage: "Company email must be a valid email address",

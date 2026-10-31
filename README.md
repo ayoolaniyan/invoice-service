@@ -26,21 +26,35 @@ Invoices belong to a company and move through a set of statuses (`draft`, `pendi
 npm install
 ```
 
+Generate an API key (see [Authentication](#authentication)):
+
+```bash
+npm run api-key:generate -- local-dev write
+```
+
 Create a `.env` file in the project root:
 
 ```env
 DATABASE_CONNECTION_STRING=mongodb://127.0.0.1:27017
 DATABASE_NAME=invoice_service
 PORT=3001
+API_KEYS=local-dev:write:<hash printed by api-key:generate>
 ```
 
-| Variable | Required | Description |
-|---|---|---|
-| `DATABASE_CONNECTION_STRING` | Yes | MongoDB connection URI |
-| `DATABASE_NAME` | Yes | Database to use |
-| `PORT` | Yes | Port the HTTP server listens on |
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `DATABASE_CONNECTION_STRING` | Yes | | MongoDB connection URI |
+| `DATABASE_NAME` | Yes | | Database to use |
+| `PORT` | Yes | | Port the HTTP server listens on |
+| `API_KEYS` | Yes | | Comma-separated `name:role:sha256-hash` entries, one per client |
+| `CORS_ORIGINS` | No | none | Comma-separated browser origins allowed to call the API, e.g. `https://app.example.com`. With none set, browsers can't call it from other sites; server-to-server calls aren't affected |
+| `RATE_LIMIT_MAX` | No | `300` | Requests allowed per client IP per window |
+| `RATE_LIMIT_WINDOW_MS` | No | `900000` (15 min) | Rate limit window in milliseconds |
+| `TRUST_PROXY` | No | off | Number of proxies (load balancer, ingress) in front of the app, so rate limiting sees real client IPs. Leave unset if clients connect directly |
+| `NODE_ENV` | No | | Set to `production` in production. This turns off the Swagger UI |
+| `ENABLE_API_DOCS` | No | on unless `NODE_ENV=production` | `true` or `false` to force the Swagger UI on or off |
 
-The app exits on startup if any of these are missing. `.env` is git-ignored, so never commit real credentials.
+The app exits on startup if a required variable is missing or `API_KEYS` is malformed. `.env` is git-ignored, so never commit real credentials.
 
 ### Run
 
@@ -56,11 +70,41 @@ npm start
 Once it's running:
 
 - API: `http://localhost:<PORT>/api/v1`
-- Swagger UI: `http://localhost:<PORT>/api-docs`
+- Swagger UI: `http://localhost:<PORT>/api-docs` (outside production). Click **Authorize** and enter your API key to try requests.
 
 ## API
 
 All endpoints are under `/api/v1`. Full request and response schemas are in the Swagger UI.
+
+### Authentication
+
+Every request to `/api/v1` needs an API key in the `X-API-Key` header:
+
+```bash
+curl http://localhost:3001/api/v1/invoices -H "X-API-Key: <your key>"
+```
+
+Each key has a role:
+
+| Role | Can use |
+|---|---|
+| `read` | `GET` endpoints only |
+| `write` | All endpoints |
+
+A missing or wrong key returns `401`. A `read` key on a `POST`, `PATCH` or `DELETE` returns `403`.
+
+**Managing keys:**
+- **Create:** `npm run api-key:generate -- <name> <read|write>` prints a new key and its `API_KEYS` entry. Give the key to the client and add the entry to `API_KEYS`.
+- **Storage:** only the SHA-256 hash is stored, so a leaked config doesn't expose usable keys, and a lost key can't be recovered. Generate a new one instead.
+- **Revoke:** remove the key's entry from `API_KEYS` and restart.
+- **Rotate:** add the new entry, move the client over, then remove the old entry.
+
+### Rate limiting
+
+Each client IP can make `RATE_LIMIT_MAX` requests (default 300) per `RATE_LIMIT_WINDOW_MS` (default 15 minutes). This also applies to requests with a wrong key, which slows down key guessing.
+- **Headers:** every response carries `RateLimit` and `RateLimit-Policy` headers.
+- **Over the limit:** the API returns `429` with a `Retry-After` header.
+- **Behind a load balancer or proxy:** set `TRUST_PROXY`. Otherwise every client shares the proxy's IP, and therefore one limit.
 
 ### Companies
 
@@ -97,6 +141,7 @@ Example: create an invoice
 ```bash
 curl -X POST http://localhost:3001/api/v1/invoices \
   -H "Content-Type: application/json" \
+  -H "X-API-Key: <write key>" \
   -d '{
     "invoiceNumber": "INV-001",
     "description": "Consulting, October",
@@ -155,9 +200,13 @@ Error:
 
 | Status | When |
 |---|---|
-| `400` | Validation failed, malformed JSON, or an invalid ID |
+| `400` | Validation failed, malformed JSON, an invalid ID, or a list where a single value is expected (e.g. `?page=1&page=2`) |
+| `401` | Missing or invalid API key |
+| `403` | The API key's role doesn't allow this request |
 | `404` | Resource or route not found |
 | `409` | Conflict, e.g. a duplicate value or deleting an invoice whose status doesn't allow it |
+| `413` | Request body larger than 100 KB |
+| `429` | Rate limit exceeded |
 | `500` | Unexpected error. Details are logged on the server, not returned to the client |
 
 ## Project structure
@@ -166,17 +215,17 @@ Error:
 index.ts                  App setup and startup
 scripts/                  One-off maintenance scripts
 src/
-  config/                 Dependency injection container, routes, Swagger
+  config/                 Dependency injection container, routes, Swagger, API keys, CORS
   controllers/            Read validated input from requests and call services
-  errors/                 Typed errors (BadRequest, NotFound, Conflict)
-  middlewares/            Request validation, response format, error handling
+  errors/                 Typed errors (BadRequest, Unauthorized, Forbidden, NotFound, ...)
+  middlewares/            Auth, rate limiting, request validation, response format, error handling
   models/                 Mongoose schemas and TypeScript interfaces
   routes/                 Express routers with their Swagger docs
   services/               Business logic and database access
   validators/             express-validator rules
 ```
 
-A request goes through: router → validators → `validateRequest` → controller → service → Mongoose model. Errors thrown anywhere in that chain are turned into a JSON response by the central error handler.
+A request goes through: security headers (helmet) → CORS → rate limiter → `authenticate` (API key) → router → `authorize` (role) → validators → `validateRequest` → controller → service → Mongoose model. Errors thrown anywhere in that chain are turned into a JSON response by the central error handler.
 
 ## Scripts
 
@@ -185,6 +234,7 @@ A request goes through: router → validators → `validateRequest` → controll
 | `npm run start:dev` | Start with nodemon and ts-node |
 | `npm run build` | Compile TypeScript to `dist/` |
 | `npm start` | Run the compiled app |
+| `npm run api-key:generate -- <name> <read\|write>` | Create an API key and its `API_KEYS` entry |
 | `npm run migrate:backfill-company-id` | Set `companyId` on invoices created before it was stored |
 | `npm run migrate:amounts-to-minor-units -- --currency NGN` | Convert decimal amounts on invoices created before currencies were stored (e.g. `150.5` → `15050`) and set their currency |
 
@@ -207,11 +257,12 @@ Done:
 - RESTful, versioned routes with pagination metadata
 - Swagger docs for every endpoint
 - Amounts stored as integer minor units with an ISO 4217 currency
+- API key authentication with read/write roles, security headers, a CORS allowlist, rate limiting, NoSQL injection protection, and patched dependencies
 
 Planned:
 
 - **Data integrity:** enforce status transitions, add unique indexes, and handle invoices when their company is deleted
-- **Security:** authentication and authorization, helmet, a CORS allowlist, rate limiting, and dependency upgrades
+- **Security:** limit each API key to its own data, and log which key made each change
 - **Tests:** unit and integration tests (Jest or Vitest, Supertest, mongodb-memory-server)
 - **Operations:** Docker, CI, linting, health checks, graceful shutdown, structured logging, and Swagger docs that work from the compiled build
 
