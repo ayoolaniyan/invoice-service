@@ -1,6 +1,7 @@
 import { inject } from "inversify";
 import { ICompany } from "./../models/company.interface";
-import { Response, Request } from "express";
+import { ICompanyPagination } from "./../models/companyPagination.interface";
+import { Request } from "express";
 import { matchedData } from "express-validator";
 import { CompanyService } from "./../services/company.service";
 import { Document } from "mongoose";
@@ -10,57 +11,29 @@ export class CompanyController {
         @inject(CompanyService) private companyService: CompanyService,
     ) { }
 
-    public async handlePostCompany(
-        req: Request<{}, {}, ICompany>,
-        res: Response
-    ): Promise<Document> {
-        const validatedData: ICompany = matchedData(req);
-        try {
-            return await this.companyService.createCompany(validatedData);
-        } catch (error: any) {
-            throw new Error(error.message || error);
-        }
+    public async handlePostCompany(req: Request): Promise<Document> {
+        const validatedData = matchedData<ICompany>(req, { locations: ["body"] });
+        return await this.companyService.createCompany(validatedData);
     }
 
-    public async handleGetCompanies(
-        req: Request,
-        res: Response
-    ): Promise<{ data: ICompany[]; meta: {} }> {
-        const validatedData = matchedData(req);
-
-        try {
-            const companies: { data: ICompany[]; meta: {} } =
-                await this.companyService.findCompanies(validatedData);
-            return companies;
-        } catch (error: any) {
-            throw new Error(error.message || error);
-        }
+    public async handleGetCompanies(req: Request): Promise<{ data: ICompany[]; meta: {} }> {
+        const pagination = matchedData<Partial<ICompanyPagination>>(req, { locations: ["query"] });
+        return await this.companyService.findCompanies(pagination);
     }
 
-    public async handleGetCompany(id: string): Promise<Document> {
-        try {
-            return await this.companyService.getCompanyById(id);
-        } catch (error: any) {
-            throw new Error(error.message || error);
-        }
+    public async handleGetCompany(req: Request<{ id: string }>): Promise<Document> {
+        return await this.companyService.getCompanyById(req.params.id);
     }
 
-    public async updateCompany(id: string, updateData: Partial<ICompany>): Promise<Document> {
-        try {
-            return await this.companyService.updateCompany({
-                _id: id,
-                ...updateData
-            });
-        } catch (error: any) {
-            throw new Error(error.message || error);
-        }
+    public async handleUpdateCompany(req: Request<{ id: string }>): Promise<Document> {
+        const updateData = matchedData<Partial<ICompany>>(req, { locations: ["body"] });
+        return await this.companyService.updateCompany({
+            _id: req.params.id,
+            ...updateData
+        });
     }
 
-    public async handleDeleteCompany(id: string): Promise<Document> {
-        try {
-            return await this.companyService.deleteCompany(id);
-        } catch (error: any) {
-            throw new Error(error.message || error);
-        }
+    public async handleDeleteCompany(req: Request<{ id: string }>): Promise<Document> {
+        return await this.companyService.deleteCompany(req.params.id);
     }
 }

@@ -5,13 +5,13 @@ const companySchema: Schema<ICompany> = new Schema(
     {
         name: {
             type: String,
-            required: [true, "Comapny name is required"],
+            required: [true, "Company name is required"],
             trim: true,
             maxlength: [100, "Company name can not be more than 100 characters."]
         },
         registrationNumber: {
             type: String,
-            required: [true, "Comapny registration Number is required"],
+            required: [true, "Company registration number is required"],
             trim: true,
         },
         email: {

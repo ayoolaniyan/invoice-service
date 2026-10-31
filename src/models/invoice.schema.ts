@@ -1,5 +1,5 @@
 import { model, Model, Schema } from "mongoose";
-import { IInvoice } from "./invoice.interface";
+import { IInvoice, INVOICE_STATUSES } from "./invoice.interface";
 
 const invoiceSchema: Schema<IInvoice> = new Schema(
     {
@@ -15,25 +15,40 @@ const invoiceSchema: Schema<IInvoice> = new Schema(
         },
         issueDate: {
             type: Date,
-            trim: true
+            required: [true, "Invoice issue date is required"],
         },
         dueDate: {
             type: Date,
-            trim: true
+            required: [true, "Invoice due date is required"],
+            validate: {
+                validator: function (this: IInvoice, dueDate: Date): boolean {
+                    return !this.issueDate || dueDate >= this.issueDate;
+                },
+                message: "Due date can not be before issue date",
+            },
         },
         status: {
             type: String,
             required: [true, "Invoice status is required"],
+            enum: {
+                values: INVOICE_STATUSES,
+                message: "{VALUE} is not a valid invoice status",
+            },
             trim: true
         },
         amount: {
             type: Number,
             required: [true, "Amount is required"],
-            trim: true
+            min: [0, "Amount can not be negative"],
+        },
+        companyId: {
+            type: Schema.Types.ObjectId,
+            ref: "Company",
+            required: [true, "Company ID is required"],
         },
         companyName: {
             type: String,
-            required: [true, "Comapny name is required"],
+            required: [true, "Company name is required"],
             trim: true
         },
         companyRegistrationNumber: {
