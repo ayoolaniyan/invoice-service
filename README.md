@@ -412,11 +412,16 @@ Done:
 - Amounts stored as integer minor units with an ISO 4217 currency
 - API key authentication with read/write roles, security headers, a CORS allowlist, rate limiting and NoSQL injection protection
 - Unit and integration tests, linting, CI, Docker, health checks, graceful shutdown and structured logging
-- Data integrity: invoice lifecycle rules, unique invoice and registration numbers, protection against deleting companies with invoices, and against concurrent updates overwriting each other
+- Data integrity:
+  - invoice lifecycle rules
+  - unique invoice and registration numbers
+  - companies with invoices can't be deleted
+  - concurrent updates can't overwrite each other
 
 Planned:
 
-- **Data integrity:** mark invoices `overdue` automatically when their due date passes (today a client sets it). Use MongoDB transactions to close the small gap between the company-delete check and the delete. That needs a replica set, which Atlas provides
+- **Automation:** mark invoices `overdue` automatically when their due date passes (today a client sets it)
+- **Transactions:** close the small gap between the company-delete check and the delete. This needs MongoDB transactions, which need a replica set (Atlas provides one)
 - **Security:** limit each API key to its own data, and record which key made each change
 - **API:** filter invoice lists by status, company and date range
 
