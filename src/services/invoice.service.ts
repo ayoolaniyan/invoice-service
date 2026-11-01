@@ -1,7 +1,8 @@
 import { injectable } from "inversify";
-import { Model } from "mongoose";
+import mongoose, { Model } from "mongoose";
 import { ICreateInvoice, IInvoice, IPartialInvoiceWithId } from "../models/invoice.interface";
 import { Invoice } from "../models/invoice.schema";
+import { canTransition, DELETABLE_INVOICE_STATUSES, INVOICE_STATUS_TRANSITIONS, isFinalStatus } from "../models/invoiceStatus";
 import { ICompany } from "../models/company.interface";
 import { Company } from "../models/company.schema";
 import { buildPaginationMeta, IPaginatedResult, IPagination, resolvePagination } from "../models/pagination.interface";
@@ -50,28 +51,37 @@ export class InvoiceService {
 
         const invoice = await this.getInvoicesById(_id);
 
+        if (isFinalStatus(invoice.status)) {
+            throw new ConflictError(`Invoice is ${invoice.status} and can no longer be changed`);
+        }
+
+        const newStatus = updateData.status;
+        if (newStatus && newStatus !== invoice.status && !canTransition(invoice.status, newStatus)) {
+            const allowed = INVOICE_STATUS_TRANSITIONS[invoice.status].join(", ");
+            throw new ConflictError(`Invoice status can't change from ${invoice.status} to ${newStatus}. Allowed: ${allowed}`);
+        }
+
         invoice.set(updateData);
 
         if (companyId) {
             invoice.set(await this.getCompanySnapshot(companyId));
         }
 
-        // save() (unlike findByIdAndUpdate) runs validators that compare fields, e.g. dueDate >= issueDate
+        // save() (unlike findByIdAndUpdate) runs validators that compare fields, e.g. dueDate >= issueDate,
+        // and fails if another request changed the invoice since it was loaded (optimistic concurrency)
         return await invoice.save();
     }
 
     public async deleteInvoice(_id: string) {
-        const invoice = await this.getInvoicesById(_id);
-
-        const allowedStatus: Array<IInvoice["status"]> = ["paid", "cancelled", "draft"];
-        if (!allowedStatus.includes(invoice.status)) {
-            throw new ConflictError(`Invoice with status "${invoice.status}" can not be deleted. Only "paid", "cancelled" and "draft" invoices can be deleted.`);
-        }
-
-        const deletedInvoice = await this.invoiceModel.findByIdAndDelete(_id);
+        // Check the status in the delete itself, so an invoice issued in the meantime is never deleted
+        const deletedInvoice = await this.invoiceModel.findOneAndDelete({
+            _id,
+            status: mongoose.trusted({ $in: DELETABLE_INVOICE_STATUSES }),
+        });
 
         if (!deletedInvoice) {
-            throw new NotFoundError(`Invoice with ID ${_id} not found`);
+            const invoice = await this.getInvoicesById(_id);
+            throw new ConflictError(`Invoice is ${invoice.status} and can't be deleted. Only draft invoices can be deleted; cancel issued invoices instead.`);
         }
 
         return deletedInvoice;

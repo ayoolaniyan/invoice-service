@@ -12,7 +12,8 @@ async function findByNumber(invoiceNumber: string) {
 }
 
 beforeAll(async () => {
-    await connectTestDatabase();
+    // Old data may include duplicates the unique indexes would reject, so don't build them
+    await connectTestDatabase({ indexes: false });
     // The scripts report progress with console.log; keep test output clean
     jest.spyOn(console, "log").mockImplementation(() => undefined);
 });

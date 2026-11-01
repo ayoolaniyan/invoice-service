@@ -168,6 +168,7 @@ export class CompanyRouter {
          * /companies/{id}:
          *   delete:
          *     summary: Delete a company
+         *     description: A company that still has invoices can't be deleted.
          *     tags: [Companies]
          *     parameters:
          *       - $ref: '#/components/parameters/Id'
@@ -178,6 +179,8 @@ export class CompanyRouter {
          *         $ref: '#/components/responses/BadRequest'
          *       404:
          *         $ref: '#/components/responses/NotFound'
+         *       409:
+         *         $ref: '#/components/responses/Conflict'
          */
         this.router.delete(
             "/:id",

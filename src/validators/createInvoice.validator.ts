@@ -1,5 +1,5 @@
 import { checkSchema } from "express-validator";
-import { INVOICE_STATUSES } from "../models/invoice.interface";
+import { INITIAL_INVOICE_STATUSES } from "../models/invoiceStatus";
 import { singleValue } from "./common.validator";
 
 export const createInvoiceValidator = checkSchema({
@@ -50,8 +50,8 @@ export const createInvoiceValidator = checkSchema({
         in: ["body"],
         ...singleValue("Invoice status"),
         isIn: {
-            options: [INVOICE_STATUSES],
-            errorMessage: `Invoice status must be one of: ${INVOICE_STATUSES.join(", ")}`,
+            options: [INITIAL_INVOICE_STATUSES],
+            errorMessage: `A new invoice must start as one of: ${INITIAL_INVOICE_STATUSES.join(", ")}`,
         },
     },
     amount: {

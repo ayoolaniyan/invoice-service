@@ -1,10 +1,12 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "@jest/globals";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, jest } from "@jest/globals";
 import request from "supertest";
+import mongoose from "mongoose";
 import { Express } from "express";
 import { createApp } from "../../src/app";
+import { Invoice } from "../../src/models/invoice.schema";
 import { READ_KEY, WRITE_KEY } from "../helpers/apiKeys";
 import { clearTestDatabase, connectTestDatabase, disconnectTestDatabase } from "../helpers/db";
-import { createCompany, createInvoice, invoiceInput } from "../helpers/fixtures";
+import { createCompany, createInvoice, createInvoiceWithStatus, invoiceInput } from "../helpers/fixtures";
 
 const BASE = "/api/v1/invoices";
 const MISSING_ID = "000000000000000000000000";
@@ -24,6 +26,10 @@ beforeAll(async () => {
 beforeEach(async () => {
     await clearTestDatabase();
     company = await createCompany(app);
+});
+
+afterEach(() => {
+    jest.restoreAllMocks();
 });
 
 afterAll(disconnectTestDatabase);
@@ -157,22 +163,160 @@ describe("PATCH /api/v1/invoices/:id", () => {
     });
 });
 
+describe("invoice numbers", () => {
+    it("must be unique, ignoring case and surrounding spaces", async () => {
+        await createInvoice(app, company._id, { invoiceNumber: "INV-2026-001" });
+
+        const sameCase = await request(app).post(BASE).set("X-API-Key", WRITE_KEY).send(invoiceInput(company._id, { invoiceNumber: "INV-2026-001" }));
+        const otherCase = await request(app).post(BASE).set("X-API-Key", WRITE_KEY).send(invoiceInput(company._id, { invoiceNumber: " inv-2026-001 " }));
+
+        for (const response of [sameCase, otherCase]) {
+            expect(response.status).toBe(409);
+            expect(response.body.error.details).toEqual([{ field: "invoiceNumber", message: expect.stringContaining("already in use") }]);
+        }
+    });
+
+    it("can't be changed to one that's already in use", async () => {
+        await createInvoice(app, company._id, { invoiceNumber: "TAKEN" });
+        const invoice = await createInvoice(app, company._id);
+
+        const response = await request(app).patch(`${BASE}/${invoice._id}`).set("X-API-Key", WRITE_KEY).send({ invoiceNumber: "taken" });
+
+        expect(response.status).toBe(409);
+    });
+
+    it("allows only one of several simultaneous creates with the same number", async () => {
+        const responses = await Promise.all(
+            Array.from({ length: 5 }, () => request(app).post(BASE).set("X-API-Key", WRITE_KEY).send(invoiceInput(company._id, { invoiceNumber: "RACE-1" })))
+        );
+
+        expect(responses.map((response) => response.status).sort()).toEqual([201, 409, 409, 409, 409]);
+    });
+});
+
+describe("status lifecycle", () => {
+    it.each(["paid", "overdue", "cancelled"])("won't create an invoice as %s", async (status) => {
+        const response = await request(app).post(BASE).set("X-API-Key", WRITE_KEY).send(invoiceInput(company._id, { status }));
+
+        expect(response.status).toBe(400);
+        expect(errorFields(response)).toContain("status");
+    });
+
+    it.each([
+        ["draft", "pending"],
+        ["draft", "cancelled"],
+        ["pending", "paid"],
+        ["pending", "overdue"],
+        ["pending", "cancelled"],
+        ["overdue", "paid"],
+        ["overdue", "cancelled"],
+    ])("allows %s -> %s", async (from, to) => {
+        const invoice = await createInvoiceWithStatus(app, company._id, from);
+
+        const response = await request(app).patch(`${BASE}/${invoice._id}`).set("X-API-Key", WRITE_KEY).send({ status: to });
+
+        expect(response.status).toBe(200);
+        expect(response.body.data.status).toBe(to);
+    });
+
+    it.each([
+        ["draft", "paid"],
+        ["draft", "overdue"],
+        ["pending", "draft"],
+        ["overdue", "pending"],
+        ["overdue", "draft"],
+    ])("refuses %s -> %s with 409 and leaves the invoice unchanged", async (from, to) => {
+        const invoice = await createInvoiceWithStatus(app, company._id, from);
+
+        const response = await request(app).patch(`${BASE}/${invoice._id}`).set("X-API-Key", WRITE_KEY).send({ status: to, amount: 1 });
+        const after = await request(app).get(`${BASE}/${invoice._id}`).set("X-API-Key", READ_KEY);
+
+        expect(response.status).toBe(409);
+        expect(response.body.error.message).toContain(`from ${from} to ${to}`);
+        expect(after.body.data).toMatchObject({ status: from, amount: invoice.amount });
+    });
+
+    it.each(["paid", "cancelled"])("locks %s invoices against any change", async (status) => {
+        const invoice = await createInvoiceWithStatus(app, company._id, status);
+
+        const statusChange = await request(app).patch(`${BASE}/${invoice._id}`).set("X-API-Key", WRITE_KEY).send({ status: "pending" });
+        const fieldChange = await request(app).patch(`${BASE}/${invoice._id}`).set("X-API-Key", WRITE_KEY).send({ description: "edited" });
+
+        expect(statusChange.status).toBe(409);
+        expect(fieldChange.status).toBe(409);
+        expect(fieldChange.body.error.message).toContain("can no longer be changed");
+    });
+
+    it("lets other fields change while the status stays the same", async () => {
+        const invoice = await createInvoiceWithStatus(app, company._id, "pending");
+
+        const response = await request(app).patch(`${BASE}/${invoice._id}`).set("X-API-Key", WRITE_KEY).send({ status: "pending", description: "Updated" });
+
+        expect(response.status).toBe(200);
+        expect(response.body.data).toMatchObject({ status: "pending", description: "Updated" });
+    });
+
+    it("rejects saving an invoice that changed since it was loaded", async () => {
+        const invoice = await createInvoiceWithStatus(app, company._id, "pending");
+        const first = await Invoice.findById(invoice._id);
+        const second = await Invoice.findById(invoice._id);
+
+        first!.status = "paid";
+        await first!.save();
+        second!.description = "edited from a stale copy";
+
+        await expect(second!.save()).rejects.toBeInstanceOf(mongoose.Error.VersionError);
+    });
+
+    it("reports a concurrent change as 409", async () => {
+        const invoice = await createInvoiceWithStatus(app, company._id, "pending");
+        const stale = await Invoice.findById(invoice._id);
+        await request(app).patch(`${BASE}/${invoice._id}`).set("X-API-Key", WRITE_KEY).send({ description: "changed meanwhile" });
+        jest.spyOn(Invoice.prototype, "save").mockRejectedValueOnce(new mongoose.Error.VersionError(stale!, 0, ["description"]));
+
+        const response = await request(app).patch(`${BASE}/${invoice._id}`).set("X-API-Key", WRITE_KEY).send({ description: "mine" });
+
+        expect(response.status).toBe(409);
+        expect(response.body.error.message).toContain("changed by another request");
+    });
+
+    it("never ends up with two different outcomes from simultaneous status changes", async () => {
+        const invoice = await createInvoiceWithStatus(app, company._id, "pending");
+
+        const responses = await Promise.all(
+            ["paid", "cancelled"].map((status) => request(app).patch(`${BASE}/${invoice._id}`).set("X-API-Key", WRITE_KEY).send({ status }))
+        );
+        const after = await request(app).get(`${BASE}/${invoice._id}`).set("X-API-Key", READ_KEY);
+
+        expect(responses.map((response) => response.status).sort()).toEqual([200, 409]);
+        const winner = responses.find((response) => response.status === 200)!;
+        expect(after.body.data.status).toBe(winner.body.data.status);
+    });
+});
+
 describe("DELETE /api/v1/invoices/:id", () => {
-    it.each(["paid", "cancelled", "draft"])("deletes a %s invoice", async (status) => {
-        const invoice = await createInvoice(app, company._id, { status });
+    it("deletes a draft invoice", async () => {
+        const invoice = await createInvoice(app, company._id, { status: "draft" });
 
         const response = await request(app).delete(`${BASE}/${invoice._id}`).set("X-API-Key", WRITE_KEY);
 
         expect(response.status).toBe(204);
     });
 
-    it.each(["pending", "overdue"])("refuses to delete a %s invoice with 409", async (status) => {
-        const invoice = await createInvoice(app, company._id, { status });
+    it.each(["pending", "overdue", "paid", "cancelled"])("refuses to delete a %s invoice with 409", async (status) => {
+        const invoice = await createInvoiceWithStatus(app, company._id, status);
 
         const response = await request(app).delete(`${BASE}/${invoice._id}`).set("X-API-Key", WRITE_KEY);
         const after = await request(app).get(`${BASE}/${invoice._id}`).set("X-API-Key", READ_KEY);
 
         expect(response.status).toBe(409);
+        expect(response.body.error.message).toContain("Only draft invoices can be deleted");
         expect(after.status).toBe(200);
+    });
+
+    it("returns 404 for an unknown invoice", async () => {
+        const response = await request(app).delete(`${BASE}/${MISSING_ID}`).set("X-API-Key", WRITE_KEY);
+
+        expect(response.status).toBe(404);
     });
 });

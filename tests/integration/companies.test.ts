@@ -4,7 +4,7 @@ import { Express } from "express";
 import { createApp } from "../../src/app";
 import { READ_KEY, WRITE_KEY } from "../helpers/apiKeys";
 import { clearTestDatabase, connectTestDatabase, disconnectTestDatabase } from "../helpers/db";
-import { companyInput, createCompany } from "../helpers/fixtures";
+import { companyInput, createCompany, createInvoice } from "../helpers/fixtures";
 
 const BASE = "/api/v1/companies";
 const MISSING_ID = "000000000000000000000000";
@@ -164,5 +164,39 @@ describe("DELETE /api/v1/companies/:id", () => {
         const response = await request(app).delete(`${BASE}/${MISSING_ID}`).set("X-API-Key", WRITE_KEY);
 
         expect(response.status).toBe(404);
+    });
+
+    it("refuses with 409 while the company has invoices, and deletes it once they're gone", async () => {
+        const company = await createCompany(app);
+        const invoice = await createInvoice(app, company._id);
+
+        const blocked = await request(app).delete(`${BASE}/${company._id}`).set("X-API-Key", WRITE_KEY);
+        const stillThere = await request(app).get(`${BASE}/${company._id}`).set("X-API-Key", READ_KEY);
+        await request(app).delete(`/api/v1/invoices/${invoice._id}`).set("X-API-Key", WRITE_KEY);
+        const allowed = await request(app).delete(`${BASE}/${company._id}`).set("X-API-Key", WRITE_KEY);
+
+        expect(blocked.status).toBe(409);
+        expect(blocked.body.error.message).toContain("1 invoice(s)");
+        expect(stillThere.status).toBe(200);
+        expect(allowed.status).toBe(204);
+    });
+});
+
+describe("registration numbers", () => {
+    it("must be unique, ignoring case", async () => {
+        await createCompany(app, { registrationNumber: "RC-555" });
+
+        const response = await request(app).post(BASE).set("X-API-Key", WRITE_KEY).send(companyInput({ registrationNumber: "rc-555" }));
+
+        expect(response.status).toBe(409);
+        expect(response.body.error.details).toEqual([{ field: "registrationNumber", message: expect.stringContaining("already in use") }]);
+    });
+
+    it("is the only unique field: companies may share an email address", async () => {
+        await createCompany(app, { email: "accounts@shared.test" });
+
+        const response = await request(app).post(BASE).set("X-API-Key", WRITE_KEY).send(companyInput({ email: "accounts@shared.test" }));
+
+        expect(response.status).toBe(201);
     });
 });

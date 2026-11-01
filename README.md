@@ -4,7 +4,7 @@
 
 A REST API for managing companies and their invoices, built with Node.js, Express 5, TypeScript, Mongoose and MongoDB.
 
-Invoices belong to a company and move through a set of statuses (`draft`, `pending`, `paid`, `overdue`, `cancelled`).
+Invoices belong to a company and move through a fixed lifecycle (`draft` → `pending` → `paid`, with `overdue` and `cancelled` along the way). Paid and cancelled invoices can't be changed.
 
 **Features:**
 - Every request is validated, and every response uses the same JSON format.
@@ -84,7 +84,10 @@ Settings are read from environment variables, or from a `.env` file in the proje
 | `TRUST_PROXY` | No | off | Number of proxies (load balancer, ingress) in front of the app, so rate limiting and logs see real client IPs. Leave unset if clients connect directly |
 | `ENABLE_API_DOCS` | No | on unless `NODE_ENV=production` | `true` or `false` to force the Swagger UI on or off |
 
-The app logs the problem and exits on startup if a required variable is missing, `PORT` isn't a valid port, `API_KEYS` is malformed, or MongoDB can't be reached.
+The app logs the problem and exits on startup if any of these happen:
+- a required variable is missing, `PORT` isn't a valid port, or `API_KEYS` is malformed
+- MongoDB can't be reached
+- the unique indexes can't be built because the database already holds duplicates (see [Checking existing data](#checking-existing-data))
 
 ## API
 
@@ -130,7 +133,10 @@ Each client IP can make `RATE_LIMIT_MAX` requests per `RATE_LIMIT_WINDOW_MS`. Th
 | `PATCH` | `/companies/:id` | Update some fields of a company | `200` |
 | `DELETE` | `/companies/:id` | Delete a company | `204` |
 
-`registrationNumber` is set when the company is created and can't be changed afterwards.
+Rules:
+
+- `registrationNumber` must be unique, ignoring case (`RC123` and `rc123` count as the same). It's set when the company is created and can't be changed afterwards. Other fields, such as `email`, may repeat, e.g. companies that share an accounting firm's address.
+- A company that still has invoices can't be deleted (`409`). Delete its draft invoices or move them to another company first.
 
 ### Invoices
 
@@ -144,11 +150,26 @@ Each client IP can make `RATE_LIMIT_MAX` requests per `RATE_LIMIT_WINDOW_MS`. Th
 
 Rules:
 
-- An invoice must reference an existing company through `companyId`. The company's name and registration number are copied onto the invoice by the server; values sent by the client are ignored.
+- `invoiceNumber` must be unique, ignoring case and surrounding spaces. A duplicate returns `409`, even when two requests race to use the same number.
+- An invoice must reference an existing company through `companyId`. The company's name and registration number are copied onto the invoice by the server; values sent by the client are ignored. The copy keeps the details as they were when the invoice was issued, so it isn't updated if the company changes later.
 - `dueDate` can't be before `issueDate`.
 - `amount` is a whole number in the currency's **minor unit** (kobo, cents, etc.), so `15050` with `NGN` means ₦150.50. Decimals are rejected. This avoids floating-point rounding errors such as `0.1 + 0.2 = 0.30000000000000004`.
 - `currency` is a required ISO 4217 code such as `NGN` or `USD`. Lower case is accepted and stored in upper case. To change it on an update, send `amount` in the same request, because the same number means a different value in another currency.
-- Only invoices with status `paid`, `cancelled` or `draft` can be deleted. Deleting any other invoice returns `409 Conflict`.
+
+#### Invoice lifecycle
+
+```
+draft ──> pending ──> paid
+  │          │  └──> overdue ──> paid
+  │          │          │
+  └──────────┴──────────┴──> cancelled
+```
+
+- **New invoices** start as `draft` or `pending`.
+- **Status changes** must follow the arrows. Any other change, e.g. `paid` → `pending`, returns `409` with the changes allowed from the current status.
+- **`paid` and `cancelled` are final:** the invoice can't be changed at all.
+- **Only drafts can be deleted.** An invoice that has been issued is cancelled instead, so every invoice number that was sent stays on record.
+- **Simultaneous updates:** if two requests change the same invoice at the same time, the second gets `409` instead of silently overwriting the first. Reload the invoice and try again.
 
 Example: create an invoice
 
@@ -218,7 +239,7 @@ Error:
 | `401` | Missing or invalid API key |
 | `403` | The API key's role doesn't allow this request |
 | `404` | Resource or route not found |
-| `409` | Conflict, e.g. a duplicate value or deleting an invoice whose status doesn't allow it |
+| `409` | Conflict with the current data: a duplicate invoice or registration number, a status change the lifecycle doesn't allow, a change to a paid or cancelled invoice, deleting an issued invoice or a company that has invoices, or a change made by another request at the same time |
 | `413` | Request body larger than 100 KB |
 | `429` | Rate limit exceeded |
 | `500` | Unexpected error. Details are logged on the server, not returned to the client |
@@ -272,17 +293,19 @@ If requests haven't finished after 10 seconds, it exits with code `1`. Unhandled
 | `npm run typecheck` | Type-check everything, including tests |
 | `npm run check` | Lint, type-check and test: what CI runs |
 | `npm run api-key:generate -- <name> <read\|write>` | Create an API key and its `API_KEYS` entry |
+| `npm run check:data` | Read-only report of duplicates and other data problems, see [Checking existing data](#checking-existing-data) |
 | `npm run migrate:*` | Data migrations, see [Data migrations](#data-migrations) |
 
 ### Testing
 
-- **Unit tests** (`tests/unit/`) cover pure logic: money conversion, API key parsing, pagination and security config.
+- **Unit tests** (`tests/unit/`) cover pure logic: the invoice lifecycle, money conversion, API key parsing, pagination and security config.
 - **Integration tests** (`tests/integration/`) send real HTTP requests to the app with Supertest. They run against an in-memory MongoDB started by [mongodb-memory-server](https://github.com/typegoose/mongodb-memory-server), and cover:
   - every endpoint, with validation and error cases
+  - every allowed and refused status change, unique numbers (including simultaneous creates) and concurrent updates
   - authentication, roles and rate limiting
   - CORS, security headers and request IDs
   - health checks
-  - both data migrations
+  - the data check and both data migrations
 
 To keep tests isolated:
 - Each test file uses its own database, so files run in parallel.
@@ -294,8 +317,8 @@ The build fails if coverage of `src/` drops below 90% of lines (75% of branches)
 ### Project structure
 
 ```
-index.ts                  Startup: config checks, database connection, graceful shutdown
-scripts/                  CLI tools: API key generator and data migrations
+index.ts                  Startup: config checks, database connection and indexes, graceful shutdown
+scripts/                  CLI tools: API key generator, data check and data migrations
 src/
   app.ts                  Builds the Express app (used by index.ts and the tests)
   config/                 Dependency injection, routes, Swagger, API keys, CORS, logger
@@ -346,8 +369,21 @@ Production checklist:
 - [ ] Set `CORS_ORIGINS` if a browser app calls the API.
 - [ ] Set `TRUST_PROXY` to the number of proxies in front of the app.
 - [ ] Serve the API over HTTPS. TLS is expected to end at the load balancer or ingress.
+- [ ] Before the first deploy of this version against existing data, run `npm run check:data` and fix anything it lists.
 - [ ] Point liveness checks at `/health` and readiness checks at `/ready`.
 - [ ] Use a shared rate-limit store if you run more than one instance.
+
+## Checking existing data
+
+`npm run check:data` is a read-only report. It changes nothing, and lists:
+
+- invoice numbers and company registration numbers used more than once, ignoring case and surrounding spaces
+- invoices whose company no longer exists
+- invoices with a status outside the lifecycle
+
+Run it before deploying against a database that already has data. The app builds its unique indexes at startup and refuses to start while duplicates block them, because serving without the indexes would let more duplicates in. Fix what the report lists, run it again until it says `No problems found.`, then deploy.
+- **Exit code:** `2` if it found problems, so it can gate a deploy pipeline.
+- **In the Docker image:** run `node dist/scripts/check-data-integrity.js`.
 
 ## Data migrations
 
@@ -376,10 +412,11 @@ Done:
 - Amounts stored as integer minor units with an ISO 4217 currency
 - API key authentication with read/write roles, security headers, a CORS allowlist, rate limiting and NoSQL injection protection
 - Unit and integration tests, linting, CI, Docker, health checks, graceful shutdown and structured logging
+- Data integrity: invoice lifecycle rules, unique invoice and registration numbers, protection against deleting companies with invoices, and against concurrent updates overwriting each other
 
 Planned:
 
-- **Data integrity:** enforce status transitions, add unique indexes, and handle invoices when their company is deleted
+- **Data integrity:** mark invoices `overdue` automatically when their due date passes (today a client sets it). Use MongoDB transactions to close the small gap between the company-delete check and the delete. That needs a replica set, which Atlas provides
 - **Security:** limit each API key to its own data, and record which key made each change
 - **API:** filter invoice lists by status, company and date range
 
