@@ -48,6 +48,8 @@ export class InvoiceRouter {
          *               $ref: '#/components/schemas/InvoiceResponse'
          *       400:
          *         $ref: '#/components/responses/BadRequest'
+         *       409:
+         *         $ref: '#/components/responses/Conflict'
          *       404:
          *         description: Company not found
          *         content:
@@ -134,7 +136,7 @@ export class InvoiceRouter {
          * /invoices/{id}:
          *   patch:
          *     summary: Update an invoice
-         *     description: Only the fields sent are changed. Sending companyId moves the invoice to that company and copies its name and registration number.
+         *     description: Only the fields sent are changed. Status changes must follow the invoice lifecycle, and paid or cancelled invoices can't be changed. Sending companyId moves the invoice to that company and copies its name and registration number.
          *     tags: [Invoices]
          *     parameters:
          *       - $ref: '#/components/parameters/Id'
@@ -155,6 +157,8 @@ export class InvoiceRouter {
          *         $ref: '#/components/responses/BadRequest'
          *       404:
          *         $ref: '#/components/responses/NotFound'
+         *       409:
+         *         $ref: '#/components/responses/Conflict'
          */
         this.router.patch(
             "/:id",
@@ -173,7 +177,7 @@ export class InvoiceRouter {
          * /invoices/{id}:
          *   delete:
          *     summary: Delete an invoice
-         *     description: Only invoices with status paid, cancelled or draft can be deleted.
+         *     description: Only draft invoices can be deleted. Cancel an issued invoice instead.
          *     tags: [Invoices]
          *     parameters:
          *       - $ref: '#/components/parameters/Id'

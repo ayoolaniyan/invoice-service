@@ -121,6 +121,8 @@ async function main() {
 
     await mongoose.connect(process.env.DATABASE_CONNECTION_STRING, {
         dbName: process.env.DATABASE_NAME,
+        // Indexes are built by the app at startup; a migration may run while duplicates still exist
+        autoIndex: false,
     });
 
     // Variables in .env are loaded when not set in the shell, so always show which database is targeted

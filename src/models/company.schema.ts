@@ -33,4 +33,10 @@ const companySchema: Schema<ICompany> = new Schema(
     { timestamps: true }
 );
 
+// Case-insensitive, so "rc123" and "RC123" count as the same company
+companySchema.index(
+    { registrationNumber: 1 },
+    { unique: true, collation: { locale: "en", strength: 2 }, name: "registrationNumber_unique" }
+);
+
 export const Company: Model<ICompany> = model("Company", companySchema);

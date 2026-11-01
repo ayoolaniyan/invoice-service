@@ -2,13 +2,16 @@ import { injectable } from "inversify";
 import { Model } from "mongoose";
 import { ICompany, IPartialCompanyWithId } from "./../models/company.interface";
 import { Company } from "./../models/company.schema";
+import { IInvoice } from "./../models/invoice.interface";
+import { Invoice } from "./../models/invoice.schema";
 import { buildPaginationMeta, IPaginatedResult, IPagination, resolvePagination } from "./../models/pagination.interface";
-import { NotFoundError } from "../errors/app.error";
+import { ConflictError, NotFoundError } from "../errors/app.error";
 
 
 @injectable()
 export class CompanyService {
     private companyModel: Model<ICompany> = Company;
+    private invoiceModel: Model<IInvoice> = Invoice;
 
     public async createCompany(data: ICompany) {
         return await new this.companyModel(data).save();
@@ -48,6 +51,14 @@ export class CompanyService {
     }
 
     public async deleteCompany(_id: string) {
+        // Deleting a company with invoices would leave them pointing at nothing.
+        // Without a transaction an invoice could still be created between this check and the
+        // delete; closing that gap needs a replica set (for transactions) or soft deletes.
+        const invoiceCount = await this.invoiceModel.countDocuments({ companyId: _id });
+        if (invoiceCount > 0) {
+            throw new ConflictError(`Company has ${invoiceCount} invoice(s) and can't be deleted. Delete or move them to another company first.`);
+        }
+
         const deletedCompany = await this.companyModel.findByIdAndDelete(_id);
 
         if (!deletedCompany) {

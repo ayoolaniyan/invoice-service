@@ -1,6 +1,7 @@
 import path from 'path';
 import swaggerJsdoc from 'swagger-jsdoc';
 import { INVOICE_STATUSES } from '../models/invoice.interface';
+import { INITIAL_INVOICE_STATUSES } from '../models/invoiceStatus';
 import { API_PREFIX } from './routes.config';
 import { API_KEY_HEADER } from '../middlewares/auth';
 
@@ -27,7 +28,7 @@ const invoiceInputProperties = {
     status: {
         type: 'string',
         enum: INVOICE_STATUSES,
-        description: 'Invoice status',
+        description: 'Invoice status. Allowed changes: draft → pending or cancelled; pending → paid, overdue or cancelled; overdue → paid or cancelled. paid and cancelled are final.',
     },
     amount: {
         type: 'integer',
@@ -164,7 +165,7 @@ const options: swaggerJsdoc.Options = {
             responses: {
                 BadRequest: errorResponse('Validation error or invalid ID'),
                 NotFound: errorResponse('Resource not found'),
-                Conflict: errorResponse('Request conflicts with the current state of the resource'),
+                Conflict: errorResponse('Conflicts with the current state: a duplicate unique value, a status change that is not allowed, or a change made by another request'),
                 Unauthorized: errorResponse(`Missing or invalid ${API_KEY_HEADER} header`),
                 Forbidden: errorResponse('The API key does not have the "write" role'),
                 TooManyRequests: errorResponse('Rate limit exceeded; retry after the time in the Retry-After header'),
@@ -201,7 +202,14 @@ const options: swaggerJsdoc.Options = {
                 CreateInvoiceInput: {
                     type: 'object',
                     required: ['invoiceNumber', 'issueDate', 'dueDate', 'status', 'amount', 'currency', 'companyId'],
-                    properties: invoiceInputProperties,
+                    properties: {
+                        ...invoiceInputProperties,
+                        status: {
+                            type: 'string',
+                            enum: INITIAL_INVOICE_STATUSES,
+                            description: 'A new invoice starts as draft or pending',
+                        },
+                    },
                 },
                 UpdateInvoiceInput: {
                     type: 'object',

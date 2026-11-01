@@ -20,7 +20,8 @@
     "check": "npm run lint && npm run typecheck && npm test",
     "migrate:backfill-company-id": "ts-node scripts/backfill-invoice-company-id.ts",
     "migrate:amounts-to-minor-units": "ts-node scripts/convert-invoice-amounts-to-minor-units.ts",
-    "api-key:generate": "ts-node scripts/generate-api-key.ts"
+    "api-key:generate": "ts-node scripts/generate-api-key.ts",
+    "check:data": "ts-node scripts/check-data-integrity.ts"
   },
   "author": "Olaniyan A . O",
   "license": "MIT",

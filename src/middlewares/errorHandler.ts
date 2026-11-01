@@ -42,8 +42,13 @@ export function errorHandler(err: unknown, req: Request, res: Response, next: Ne
     }
 
     if (isDuplicateKeyError(err)) {
-        const fields = Object.keys(err.keyValue ?? {}).join(", ");
-        return res.status(StatusCodes.CONFLICT).json({ message: `Duplicate value for ${fields || "a unique field"}` });
+        const [field, value] = Object.entries(err.keyValue ?? {})[0] ?? [];
+        const message = field ? `${field} "${String(value)}" is already in use` : "A record with the same unique value already exists";
+        return res.status(StatusCodes.CONFLICT).json({ message, details: field ? [{ field, message }] : undefined });
+    }
+
+    if (err instanceof mongoose.Error.VersionError) {
+        return res.status(StatusCodes.CONFLICT).json({ message: "The record was changed by another request; reload it and try again" });
     }
 
     if (isClientHttpError(err)) {

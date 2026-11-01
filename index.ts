@@ -4,6 +4,7 @@ import { Server } from "http";
 import mongoose from "mongoose";
 import { createApp } from "./src/app";
 import { getApiKeys } from "./src/config/auth.config";
+import { ensureIndexes } from "./src/config/database.config";
 import { logger } from "./src/config/logger.config";
 import { markShuttingDown } from "./src/routes/health.router";
 
@@ -77,10 +78,20 @@ async function bootstrap() {
     try {
         await mongoose.connect(process.env.DATABASE_CONNECTION_STRING!, {
             dbName: process.env.DATABASE_NAME,
+            // Built explicitly below, so a failure stops startup instead of being ignored
+            autoIndex: false,
         });
         logger.info({ database: mongoose.connection.name }, "Connected to MongoDB");
     } catch (error) {
         logger.fatal({ err: error }, "Could not connect to MongoDB");
+        process.exit(1);
+    }
+
+    try {
+        await ensureIndexes();
+    } catch (error) {
+        // Usually existing duplicates blocking a unique index. Serving without it would let more in.
+        logger.fatal({ err: error }, "Could not build database indexes; run `npm run check:data` to find duplicate records");
         process.exit(1);
     }
 

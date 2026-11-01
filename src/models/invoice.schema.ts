@@ -69,7 +69,21 @@ const invoiceSchema: Schema<IInvoice> = new Schema(
             trim: true
         }
     },
-    { timestamps: true }
+    {
+        timestamps: true,
+        // save() fails with a VersionError if the invoice changed since it was loaded,
+        // so two simultaneous updates can't silently overwrite each other's status change
+        optimisticConcurrency: true,
+    }
 );
+
+// Case-insensitive, so "INV-001" and "inv-001" can't both exist
+invoiceSchema.index(
+    { invoiceNumber: 1 },
+    { unique: true, collation: { locale: "en", strength: 2 }, name: "invoiceNumber_unique" }
+);
+
+// Finding a company's invoices (e.g. before deleting the company) shouldn't scan the collection
+invoiceSchema.index({ companyId: 1 }, { name: "companyId" });
 
 export const Invoice: Model<IInvoice> = model("Invoice", invoiceSchema);

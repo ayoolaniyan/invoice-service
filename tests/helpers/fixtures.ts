@@ -39,6 +39,30 @@ export async function createCompany(app: Express, overrides: Record<string, unkn
     return response.body.data;
 }
 
+// The steps through the lifecycle that reach each status from a new draft
+const PATH_TO_STATUS: Record<string, string[]> = {
+    draft: [],
+    pending: ["pending"],
+    overdue: ["pending", "overdue"],
+    paid: ["pending", "paid"],
+    cancelled: ["cancelled"],
+};
+
+/** Creates a draft invoice and moves it through the allowed status changes to `status` */
+export async function createInvoiceWithStatus(app: Express, companyId: string, status: string, overrides: Record<string, unknown> = {}) {
+    let invoice = await createInvoice(app, companyId, { ...overrides, status: "draft" });
+
+    for (const next of PATH_TO_STATUS[status]) {
+        const response = await request(app).patch(`/api/v1/invoices/${invoice._id}`).set("X-API-Key", WRITE_KEY).send({ status: next });
+        if (response.status !== 200) {
+            throw new Error(`Could not move invoice to ${next}: ${response.status} ${JSON.stringify(response.body)}`);
+        }
+        invoice = response.body.data;
+    }
+
+    return invoice;
+}
+
 export async function createInvoice(app: Express, companyId: string, overrides: Record<string, unknown> = {}) {
     const response = await request(app).post("/api/v1/invoices").set("X-API-Key", WRITE_KEY).send(invoiceInput(companyId, overrides));
     if (response.status !== 201) {
